@@ -158,5 +158,19 @@ func SetApiRouter(router *gin.Engine) {
 			taskRoute.GET("/self", middleware.UserAuth(), controller.GetUserTask)
 			taskRoute.GET("/", middleware.AdminAuth(), controller.GetAllTask)
 		}
+
+		conversationRoute := apiRouter.Group("/conversation")
+		{
+			// 用户路由
+			conversationRoute.GET("/history", middleware.UserAuth(), controller.GetConversationHistories)
+			conversationRoute.GET("/history/:id", middleware.UserAuth(), controller.GetConversationHistory)
+			conversationRoute.DELETE("/history/:id", middleware.UserAuth(), controller.DeleteConversationHistory)
+			conversationRoute.DELETE("/history/conversation/:conversation_id", middleware.UserAuth(), controller.DeleteConversationHistoriesByConversationId)
+			
+			// 管理员路由
+			conversationRoute.GET("/admin/history", middleware.AdminAuth(), controller.AdminGetConversationHistories)
+			conversationRoute.DELETE("/admin/history/:id", middleware.AdminAuth(), controller.AdminDeleteConversationHistory)
+			conversationRoute.POST("/admin/cleanup", middleware.AdminAuth(), controller.CleanupOldConversationHistories)
+		}
 	}
 }

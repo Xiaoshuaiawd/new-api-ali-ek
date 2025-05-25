@@ -23,6 +23,12 @@ import (
 	"github.com/pkg/errors"
 )
 
+// AIResponseContent AI回复内容结构
+type AIResponseContent struct {
+	Content          string `json:"content"`
+	ReasoningContent string `json:"reasoning_content,omitempty"`
+}
+
 func sendStreamData(c *gin.Context, info *relaycommon.RelayInfo, data string, forceFormat bool, thinkToContent bool) error {
 	if data == "" {
 		return nil
@@ -190,6 +196,31 @@ func OaiStreamHandler(c *gin.Context, resp *http.Response, info *relaycommon.Rel
 		}
 	}
 
+	// 保存流式响应的AI回复内容到上下文中，用于对话历史记录
+	responseText := responseTextBuilder.String()
+	if responseText != "" {
+		// 从流式响应中提取思考内容
+		var reasoningContent strings.Builder
+		for _, item := range streamItems {
+			var streamResponse dto.ChatCompletionsStreamResponse
+			if err := json.Unmarshal([]byte(item), &streamResponse); err == nil {
+				for _, choice := range streamResponse.Choices {
+					if reasoning := choice.Delta.GetReasoningContent(); reasoning != "" {
+						reasoningContent.WriteString(reasoning)
+					}
+				}
+			}
+		}
+
+		aiResponse := &AIResponseContent{
+			Content: responseText,
+		}
+		if reasoningContent.Len() > 0 {
+			aiResponse.ReasoningContent = reasoningContent.String()
+		}
+		c.Set("ai_response_content", aiResponse)
+	}
+
 	handleFinalResponse(c, info, lastStreamData, responseId, createAt, model, systemFingerprint, usage, containStreamUsage)
 
 	return nil, usage
@@ -215,7 +246,25 @@ func OpenaiHandler(c *gin.Context, resp *http.Response, info *relaycommon.RelayI
 			StatusCode: resp.StatusCode,
 		}, nil
 	}
-	
+
+	// 保存AI回复内容到上下文中，用于对话历史记录
+	if len(simpleResponse.Choices) > 0 {
+		choice := simpleResponse.Choices[0]
+		content := choice.Message.StringContent()
+		if content != "" {
+			aiResponse := &AIResponseContent{
+				Content: content,
+			}
+			// 检查思考内容，支持两种字段名
+			if choice.Message.ReasoningContent != "" {
+				aiResponse.ReasoningContent = choice.Message.ReasoningContent
+			} else if choice.Message.Reasoning != "" {
+				aiResponse.ReasoningContent = choice.Message.Reasoning
+			}
+			c.Set("ai_response_content", aiResponse)
+		}
+	}
+
 	forceFormat := false
 	if forceFmt, ok := info.ChannelSetting[constant.ForceFormat].(bool); ok {
 		forceFormat = forceFmt

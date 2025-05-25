@@ -12,6 +12,7 @@ import (
 	"one-api/constant"
 	"one-api/dto"
 	"one-api/model"
+	"one-api/relay/channel/openai"
 	relaycommon "one-api/relay/common"
 	relayconstant "one-api/relay/constant"
 	"one-api/relay/helper"
@@ -224,6 +225,12 @@ func TextHelper(c *gin.Context) (openaiErr *dto.OpenAIErrorWithStatusCode) {
 	} else {
 		postConsumeQuota(c, relayInfo, usage.(*dto.Usage), preConsumedQuota, userQuota, priceData, "")
 	}
+
+	// 保存对话历史 (仅对聊天完成模式且AI成功回复)
+	if relayInfo.RelayMode == relayconstant.RelayModeChatCompletions && textRequest != nil && openaiErr == nil {
+		saveConversationHistoryWithResponse(c, textRequest, relayInfo)
+	}
+
 	return nil
 }
 
@@ -479,4 +486,113 @@ func postConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo,
 	}
 	model.RecordConsumeLog(ctx, relayInfo.UserId, relayInfo.ChannelId, promptTokens, completionTokens, logModel,
 		tokenName, quota, logContent, relayInfo.TokenId, userQuota, int(useTimeSeconds), relayInfo.IsStream, relayInfo.Group, other)
+}
+
+// saveConversationHistoryWithResponse 保存包含AI回复的对话历史
+func saveConversationHistoryWithResponse(c *gin.Context, textRequest *dto.GeneralOpenAIRequest, relayInfo *relaycommon.RelayInfo) {
+	// 生成对话ID，优先从请求头获取，如果没有则使用用户ID+时间戳生成
+	conversationId := c.GetHeader("X-Conversation-ID")
+	if conversationId == "" {
+		conversationId = c.GetString("conversation_id")
+	}
+	if conversationId == "" {
+		conversationId = fmt.Sprintf("conv_%d_%d", relayInfo.UserId, time.Now().Unix())
+	}
+
+	// 从响应中获取AI回复内容
+	aiResponse := extractAIResponseFromContext(c)
+	if aiResponse == nil || aiResponse.Content == "" {
+		// 如果没有AI回复内容或内容为空，则不保存
+		return
+	}
+
+	// 构建完整的对话消息列表
+	messages := make([]dto.Message, len(textRequest.Messages))
+	copy(messages, textRequest.Messages)
+
+	// 添加AI的回复消息
+	aiMessage := dto.Message{
+		Role: "assistant",
+	}
+	aiMessage.SetStringContent(aiResponse.Content)
+
+	// 如果有思考内容，添加到消息中
+	if aiResponse.ReasoningContent != "" {
+		aiMessage.ReasoningContent = aiResponse.ReasoningContent
+	}
+
+	messages = append(messages, aiMessage)
+
+	// 构建要保存的JSON数据
+	conversationData := map[string]interface{}{
+		"messages": messages,
+		"model":    relayInfo.OriginModelName,
+	}
+
+	// 将数据转换为JSON字符串
+	jsonData, err := json.Marshal(conversationData)
+	if err != nil {
+		common.LogError(c, "failed to marshal conversation data: "+err.Error())
+		return
+	}
+
+	// 异步保存对话历史，避免影响主流程性能
+	gopool.Go(func() {
+		err := model.CreateConversationHistory(c, conversationId, relayInfo.OriginModelName, string(jsonData), relayInfo.UserId)
+		if err != nil {
+			common.LogError(c, "failed to save conversation history: "+err.Error())
+		}
+	})
+}
+
+// extractAIResponseFromContext 从上下文中提取AI回复内容
+func extractAIResponseFromContext(c *gin.Context) *openai.AIResponseContent {
+	// 尝试从上下文中获取响应数据
+	if responseData, exists := c.Get("ai_response_content"); exists {
+		if content, ok := responseData.(*openai.AIResponseContent); ok {
+			return content
+		}
+	}
+
+	// 如果上下文中没有，尝试从响应体中解析
+	if responseBody, exists := c.Get("response_body"); exists {
+		if bodyBytes, ok := responseBody.([]byte); ok {
+			return parseAIResponseFromBody(bodyBytes)
+		}
+	}
+
+	return nil
+}
+
+// parseAIResponseFromBody 从响应体中解析AI回复内容
+func parseAIResponseFromBody(responseBody []byte) *openai.AIResponseContent {
+	var openaiResponse dto.OpenAITextResponse
+	if err := json.Unmarshal(responseBody, &openaiResponse); err != nil {
+		return nil
+	}
+
+	if len(openaiResponse.Choices) == 0 {
+		return nil
+	}
+
+	choice := openaiResponse.Choices[0]
+	content := choice.Message.StringContent()
+
+	// 检查是否有内容
+	if content == "" {
+		return nil
+	}
+
+	result := &openai.AIResponseContent{
+		Content: content,
+	}
+
+	// 检查思考内容，支持两种字段名
+	if choice.Message.ReasoningContent != "" {
+		result.ReasoningContent = choice.Message.ReasoningContent
+	} else if choice.Message.Reasoning != "" {
+		result.ReasoningContent = choice.Message.Reasoning
+	}
+
+	return result
 }
