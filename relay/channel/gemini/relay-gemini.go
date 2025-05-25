@@ -677,9 +677,13 @@ func GeminiChatStreamHandler(c *gin.Context, resp *http.Response, info *relaycom
 		response.Created = createAt
 		response.Model = info.UpstreamModelName
 		if geminiResponse.UsageMetadata.TotalTokenCount != 0 {
+			originalCompletionTokens := geminiResponse.UsageMetadata.CandidatesTokenCount
+			reasoningTokens := geminiResponse.UsageMetadata.ThoughtsTokenCount
+
 			usage.PromptTokens = geminiResponse.UsageMetadata.PromptTokenCount
-			usage.CompletionTokens = geminiResponse.UsageMetadata.CandidatesTokenCount
-			usage.CompletionTokenDetails.ReasoningTokens = geminiResponse.UsageMetadata.ThoughtsTokenCount
+			usage.CompletionTokens = originalCompletionTokens + reasoningTokens // completion_tokens = 原completion_tokens + reasoning_tokens
+			usage.CompletionTokenDetails.ReasoningTokens = reasoningTokens
+			usage.CompletionTokenDetails.TextTokens = originalCompletionTokens // text_tokens = 原completion_tokens
 			usage.TotalTokens = geminiResponse.UsageMetadata.TotalTokenCount
 		}
 		err = helper.ObjectData(c, response)
@@ -702,7 +706,11 @@ func GeminiChatStreamHandler(c *gin.Context, resp *http.Response, info *relaycom
 	}
 
 	usage.PromptTokensDetails.TextTokens = usage.PromptTokens
-	usage.CompletionTokens = usage.TotalTokens - usage.PromptTokens
+	// 如果没有从响应中获取到usage信息，则使用计算的方式
+	if usage.CompletionTokens == 0 && usage.TotalTokens > usage.PromptTokens {
+		usage.CompletionTokens = usage.TotalTokens - usage.PromptTokens
+		usage.CompletionTokenDetails.TextTokens = usage.CompletionTokens
+	}
 
 	if info.ShouldIncludeUsage {
 		response = helper.GenerateFinalUsageResponse(id, createAt, info.UpstreamModelName, *usage)
@@ -746,14 +754,18 @@ func GeminiChatHandler(c *gin.Context, resp *http.Response, info *relaycommon.Re
 	}
 	fullTextResponse := responseGeminiChat2OpenAI(&geminiResponse)
 	fullTextResponse.Model = info.UpstreamModelName
+	// 保存原始的completion_tokens用作text_tokens
+	originalCompletionTokens := geminiResponse.UsageMetadata.CandidatesTokenCount
+	reasoningTokens := geminiResponse.UsageMetadata.ThoughtsTokenCount
+
 	usage := dto.Usage{
 		PromptTokens:     geminiResponse.UsageMetadata.PromptTokenCount,
-		CompletionTokens: geminiResponse.UsageMetadata.CandidatesTokenCount,
+		CompletionTokens: originalCompletionTokens + reasoningTokens, // completion_tokens = 原completion_tokens + reasoning_tokens
 		TotalTokens:      geminiResponse.UsageMetadata.TotalTokenCount,
 	}
 
-	usage.CompletionTokenDetails.ReasoningTokens = geminiResponse.UsageMetadata.ThoughtsTokenCount
-	usage.CompletionTokens = usage.TotalTokens - usage.PromptTokens
+	usage.CompletionTokenDetails.ReasoningTokens = reasoningTokens
+	usage.CompletionTokenDetails.TextTokens = originalCompletionTokens // text_tokens = 原completion_tokens
 
 	fullTextResponse.Usage = usage
 	jsonResponse, err := json.Marshal(fullTextResponse)
