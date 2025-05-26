@@ -87,6 +87,12 @@ const EditChannel = (props) => {
     priority: 0,
     weight: 0,
     tag: '',
+    quota_limit_enabled: false,
+    quota_limit: 0,
+    count_limit_enabled: false,
+    count_limit: 0,
+    auto_reset_enabled: false,
+    auto_reset_interval: 0,
   };
   const [batch, setBatch] = useState(false);
   const [autoBan, setAutoBan] = useState(true);
@@ -186,6 +192,30 @@ const EditChannel = (props) => {
           null,
           2,
         );
+      }
+      // 处理额度限制字段
+      if (data.quota_limit_enabled === undefined) {
+        data.quota_limit_enabled = false;
+      }
+      // 将数据库中的token数量转换为金额显示（500000token = 1刀）
+      if (data.quota_limit && data.quota_limit > 0) {
+        data.quota_limit = (data.quota_limit / 500000).toFixed(2);
+      } else {
+        data.quota_limit = 0;
+      }
+      // 处理次数限制字段
+      if (data.count_limit_enabled === undefined) {
+        data.count_limit_enabled = false;
+      }
+      if (data.count_limit === undefined) {
+        data.count_limit = 0;
+      }
+      // 处理自动重置字段
+      if (data.auto_reset_enabled === undefined) {
+        data.auto_reset_enabled = false;
+      }
+      if (data.auto_reset_interval === undefined) {
+        data.auto_reset_interval = 0;
       }
       setInputs(data);
       if (data.auto_ban === 0) {
@@ -348,6 +378,32 @@ const EditChannel = (props) => {
     localInputs.auto_ban = autoBan ? 1 : 0;
     localInputs.models = localInputs.models.join(',');
     localInputs.group = localInputs.groups.join(',');
+    
+    // 处理限额相关字段
+    localInputs.quota_limit_enabled = Boolean(localInputs.quota_limit_enabled);
+    if (!localInputs.quota_limit_enabled || localInputs.quota_limit === undefined || localInputs.quota_limit === '') {
+      localInputs.quota_limit = 0;
+    } else {
+      // 将用户输入的金额（刀）转换为token数量（500000token = 1刀）
+      const dollarAmount = parseFloat(localInputs.quota_limit) || 0;
+      localInputs.quota_limit = Math.round(dollarAmount * 500000);
+    }
+    
+    // 处理次数限制相关字段
+    localInputs.count_limit_enabled = Boolean(localInputs.count_limit_enabled);
+    if (!localInputs.count_limit_enabled || localInputs.count_limit === undefined || localInputs.count_limit === '') {
+      localInputs.count_limit = 0;
+    } else {
+      localInputs.count_limit = parseInt(localInputs.count_limit) || 0;
+    }
+    
+    // 处理自动重置相关字段
+    localInputs.auto_reset_enabled = Boolean(localInputs.auto_reset_enabled);
+    if (!localInputs.auto_reset_enabled || localInputs.auto_reset_interval === undefined || localInputs.auto_reset_interval === '') {
+      localInputs.auto_reset_interval = 0;
+    } else {
+      localInputs.auto_reset_interval = parseInt(localInputs.auto_reset_interval) || 0;
+    }
     if (isEdit) {
       res = await API.put(`/api/channel/`, {
         ...localInputs,
@@ -1125,6 +1181,127 @@ const EditChannel = (props) => {
               </Typography.Text>
             </Space>
           </div>
+          <div style={{ marginTop: 10, display: 'flex' }}>
+            <Space>
+              <Checkbox
+                name='quota_limit_enabled'
+                checked={Boolean(inputs.quota_limit_enabled)}
+                onChange={(checked) => {
+                  handleInputChange('quota_limit_enabled', checked);
+                  // 如果启用额度限制，则禁用次数限制
+                  if (checked) {
+                    handleInputChange('count_limit_enabled', false);
+                  }
+                }}
+              />
+              <Typography.Text strong>
+                {t('启用渠道限额（达到限额后自动禁用渠道）')}
+              </Typography.Text>
+            </Space>
+          </div>
+          {inputs.quota_limit_enabled && (
+            <div style={{ marginTop: 10 }}>
+              <Typography.Text strong>{t('限额设置（单位：刀）')}：</Typography.Text>
+              <Input
+                label={t('限额金额')}
+                name='quota_limit'
+                placeholder={t('请输入限额金额，以500000token为1刀计算')}
+                onChange={(value) => {
+                  const number = parseFloat(value);
+                  if (isNaN(number)) {
+                    handleInputChange('quota_limit', value);
+                  } else {
+                    handleInputChange('quota_limit', number);
+                  }
+                }}
+                value={inputs.quota_limit}
+                autoComplete='new-password'
+              />
+              <Typography.Text type="secondary" style={{ fontSize: '12px' }}>
+                {t('说明：系统按500000token为1刀计算，当渠道使用额度达到设置的限额时，将自动禁用该渠道')}
+              </Typography.Text>
+            </div>
+          )}
+          <div style={{ marginTop: 10, display: 'flex' }}>
+            <Space>
+              <Checkbox
+                name='count_limit_enabled'
+                checked={Boolean(inputs.count_limit_enabled)}
+                onChange={(checked) => {
+                  handleInputChange('count_limit_enabled', checked);
+                  // 如果启用次数限制，则禁用额度限制
+                  if (checked) {
+                    handleInputChange('quota_limit_enabled', false);
+                  }
+                }}
+              />
+              <Typography.Text strong>
+                {t('启用渠道次数限制（达到限制次数后自动禁用渠道）')}
+              </Typography.Text>
+            </Space>
+          </div>
+          {inputs.count_limit_enabled && (
+            <div style={{ marginTop: 10 }}>
+              <Typography.Text strong>{t('次数限制设置')}：</Typography.Text>
+              <Input
+                label={t('限制次数')}
+                name='count_limit'
+                placeholder={t('请输入限制次数，例如：1000')}
+                onChange={(value) => {
+                  const number = parseInt(value);
+                  if (isNaN(number)) {
+                    handleInputChange('count_limit', value);
+                  } else {
+                    handleInputChange('count_limit', number);
+                  }
+                }}
+                value={inputs.count_limit}
+                autoComplete='new-password'
+              />
+              <Typography.Text type="secondary" style={{ fontSize: '12px' }}>
+                {t('说明：当渠道调用次数达到设置的限制时，将自动禁用该渠道')}
+              </Typography.Text>
+              
+              <div style={{ marginTop: 10, display: 'flex' }}>
+                <Space>
+                  <Checkbox
+                    name='auto_reset_enabled'
+                    checked={Boolean(inputs.auto_reset_enabled)}
+                    onChange={(checked) => {
+                      handleInputChange('auto_reset_enabled', checked);
+                    }}
+                  />
+                  <Typography.Text strong>
+                    {t('启用自动重置（达到限制后自动重新启用渠道）')}
+                  </Typography.Text>
+                </Space>
+              </div>
+              
+              {inputs.auto_reset_enabled && (
+                <div style={{ marginTop: 10 }}>
+                  <Typography.Text strong>{t('自动重置间隔（秒）')}：</Typography.Text>
+                  <Input
+                    label={t('重置间隔')}
+                    name='auto_reset_interval'
+                    placeholder={t('请输入重置间隔（秒），例如：3600（1小时）')}
+                    onChange={(value) => {
+                      const number = parseInt(value);
+                      if (isNaN(number)) {
+                        handleInputChange('auto_reset_interval', value);
+                      } else {
+                        handleInputChange('auto_reset_interval', number);
+                      }
+                    }}
+                    value={inputs.auto_reset_interval}
+                    autoComplete='new-password'
+                  />
+                  <Typography.Text type="secondary" style={{ fontSize: '12px' }}>
+                    {t('说明：当渠道因次数限制被禁用后，等待指定时间（秒）后自动重新启用并重置使用次数。例如：3600表示1小时后重置')}
+                  </Typography.Text>
+                </div>
+              )}
+            </div>
+          )}
           <div style={{ marginTop: 10 }}>
             <Typography.Text strong>
               {t('状态码复写（仅影响本地判断，不修改返回到上游的状态码）')}：

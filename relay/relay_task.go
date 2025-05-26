@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/gin-gonic/gin"
 	"io"
 	"net/http"
 	"one-api/common"
@@ -17,6 +16,8 @@ import (
 	"one-api/service"
 	"one-api/setting"
 	"one-api/setting/operation_setting"
+
+	"github.com/gin-gonic/gin"
 )
 
 /*
@@ -127,6 +128,7 @@ func RelayTaskSubmit(c *gin.Context, relayMode int) (taskErr *dto.TaskError) {
 					modelName, tokenName, quota, logContent, relayInfo.TokenId, userQuota, 0, false, relayInfo.Group, other)
 				model.UpdateUserUsedQuotaAndRequestCount(relayInfo.UserId, quota)
 				model.UpdateChannelUsedQuota(relayInfo.ChannelId, quota)
+				model.UpdateChannelUsedCount(relayInfo.ChannelId, 1)
 			}
 		}
 	}()

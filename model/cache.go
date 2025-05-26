@@ -96,8 +96,20 @@ func CacheGetRandomSatisfiedChannel(group string, model string, retry int) (*Cha
 		return nil, errors.New("channel not found")
 	}
 
-	uniquePriorities := make(map[int]bool)
+	// 过滤掉超过限额的渠道
+	var validChannels []*Channel
 	for _, channel := range channels {
+		if !channel.CheckQuotaLimit() {
+			validChannels = append(validChannels, channel)
+		}
+	}
+
+	if len(validChannels) == 0 {
+		return nil, errors.New("no available channel (all channels exceeded quota limit)")
+	}
+
+	uniquePriorities := make(map[int]bool)
+	for _, channel := range validChannels {
 		uniquePriorities[int(channel.GetPriority())] = true
 	}
 	var sortedUniquePriorities []int
@@ -113,7 +125,7 @@ func CacheGetRandomSatisfiedChannel(group string, model string, retry int) (*Cha
 
 	// get the priority for the given retry number
 	var targetChannels []*Channel
-	for _, channel := range channels {
+	for _, channel := range validChannels {
 		if channel.GetPriority() == targetPriority {
 			targetChannels = append(targetChannels, channel)
 		}

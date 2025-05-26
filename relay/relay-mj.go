@@ -229,6 +229,7 @@ func RelaySwapFace(c *gin.Context) *dto.MidjourneyResponse {
 				model.UpdateUserUsedQuotaAndRequestCount(userId, quota)
 				channelId := c.GetInt("channel_id")
 				model.UpdateChannelUsedQuota(channelId, quota)
+				model.UpdateChannelUsedCount(channelId, 1)
 			}
 		}
 	}()
@@ -531,6 +532,7 @@ func RelayMidjourneySubmit(c *gin.Context, relayMode int) *dto.MidjourneyRespons
 				model.UpdateUserUsedQuotaAndRequestCount(userId, quota)
 				channelId := c.GetInt("channel_id")
 				model.UpdateChannelUsedQuota(channelId, quota)
+				model.UpdateChannelUsedCount(channelId, 1)
 			}
 		}
 	}()

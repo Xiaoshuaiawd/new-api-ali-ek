@@ -2,11 +2,12 @@ package model
 
 import (
 	"errors"
-	"github.com/bytedance/gopkg/util/gopool"
-	"gorm.io/gorm"
 	"one-api/common"
 	"sync"
 	"time"
+
+	"github.com/bytedance/gopkg/util/gopool"
+	"gorm.io/gorm"
 )
 
 const (
@@ -14,6 +15,7 @@ const (
 	BatchUpdateTypeTokenQuota
 	BatchUpdateTypeUsedQuota
 	BatchUpdateTypeChannelUsedQuota
+	BatchUpdateTypeChannelUsedCount
 	BatchUpdateTypeRequestCount
 	BatchUpdateTypeCount // if you add a new type, you need to add a new map and a new lock
 )
@@ -73,6 +75,8 @@ func batchUpdate() {
 				updateUserRequestCount(key, value)
 			case BatchUpdateTypeChannelUsedQuota:
 				updateChannelUsedQuota(key, value)
+			case BatchUpdateTypeChannelUsedCount:
+				updateChannelUsedCount(key, value)
 			}
 		}
 	}

@@ -2,9 +2,11 @@ package model
 
 import (
 	"encoding/json"
+	"fmt"
 	"one-api/common"
 	"strings"
 	"sync"
+	"time"
 
 	"gorm.io/gorm"
 )
@@ -37,6 +39,17 @@ type Channel struct {
 	Tag               *string `json:"tag" gorm:"index"`
 	Setting           *string `json:"setting" gorm:"type:text"`
 	ParamOverride     *string `json:"param_override" gorm:"type:text"`
+	// 渠道限额相关字段
+	QuotaLimitEnabled *bool  `json:"quota_limit_enabled" gorm:"default:false"` // 是否启用限额
+	QuotaLimit        *int64 `json:"quota_limit" gorm:"bigint;default:0"`      // 限额值（以500000token为1刀计算）
+
+	// 渠道次数限制相关字段
+	CountLimitEnabled *bool  `json:"count_limit_enabled" gorm:"default:false"`    // 是否启用次数限制
+	CountLimit        *int64 `json:"count_limit" gorm:"bigint;default:0"`         // 次数限制值
+	UsedCount         int64  `json:"used_count" gorm:"bigint;default:0"`          // 已使用次数
+	AutoResetEnabled  *bool  `json:"auto_reset_enabled" gorm:"default:false"`     // 是否启用自动重置
+	AutoResetInterval *int64 `json:"auto_reset_interval" gorm:"bigint;default:0"` // 自动重置间隔（秒）
+	LastResetTime     int64  `json:"last_reset_time" gorm:"bigint;default:0"`     // 禁用时间（用于自动重置计时）
 }
 
 func (channel *Channel) GetModels() []string {
@@ -93,6 +106,110 @@ func (channel *Channel) GetAutoBan() bool {
 		return false
 	}
 	return *channel.AutoBan == 1
+}
+
+func (channel *Channel) GetQuotaLimitEnabled() bool {
+	if channel.QuotaLimitEnabled == nil {
+		return false
+	}
+	return *channel.QuotaLimitEnabled
+}
+
+func (channel *Channel) GetQuotaLimit() int64 {
+	if channel.QuotaLimit == nil {
+		return 0
+	}
+	return *channel.QuotaLimit
+}
+
+func (channel *Channel) SetQuotaLimitEnabled(enabled bool) {
+	channel.QuotaLimitEnabled = &enabled
+}
+
+func (channel *Channel) SetQuotaLimit(limit int64) {
+	channel.QuotaLimit = &limit
+}
+
+func (channel *Channel) GetCountLimitEnabled() bool {
+	if channel.CountLimitEnabled == nil {
+		return false
+	}
+	return *channel.CountLimitEnabled
+}
+
+func (channel *Channel) GetCountLimit() int64 {
+	if channel.CountLimit == nil {
+		return 0
+	}
+	return *channel.CountLimit
+}
+
+func (channel *Channel) SetCountLimitEnabled(enabled bool) {
+	channel.CountLimitEnabled = &enabled
+}
+
+func (channel *Channel) SetCountLimit(limit int64) {
+	channel.CountLimit = &limit
+}
+
+func (channel *Channel) GetAutoResetEnabled() bool {
+	if channel.AutoResetEnabled == nil {
+		return false
+	}
+	return *channel.AutoResetEnabled
+}
+
+func (channel *Channel) GetAutoResetInterval() int64 {
+	if channel.AutoResetInterval == nil {
+		return 0
+	}
+	return *channel.AutoResetInterval
+}
+
+func (channel *Channel) SetAutoResetEnabled(enabled bool) {
+	channel.AutoResetEnabled = &enabled
+}
+
+func (channel *Channel) SetAutoResetInterval(interval int64) {
+	channel.AutoResetInterval = &interval
+}
+
+// CheckQuotaLimit 检查渠道是否超过限额
+func (channel *Channel) CheckQuotaLimit() bool {
+	// 检查额度限制
+	if channel.GetQuotaLimitEnabled() {
+		limit := channel.GetQuotaLimit()
+		if limit > 0 && channel.UsedQuota >= limit {
+			return true
+		}
+	}
+
+	// 检查次数限制
+	if channel.GetCountLimitEnabled() {
+		limit := channel.GetCountLimit()
+		if limit > 0 && channel.UsedCount >= limit {
+			return true
+		}
+	}
+
+	return false // 未启用任何限制或未达到限制
+}
+
+// CheckCountLimit 检查渠道是否超过次数限制
+func (channel *Channel) CheckCountLimit() bool {
+	if !channel.GetCountLimitEnabled() {
+		return false // 未启用次数限制，不受限制
+	}
+
+	limit := channel.GetCountLimit()
+	if limit <= 0 {
+		return false // 限制为0或负数，不受限制
+	}
+
+	// 注意：自动重置逻辑现在由定时任务 CheckAndResetChannels() 处理
+	// 这里不再处理自动重置，只检查是否超过限制
+
+	return channel.UsedCount >= limit
 }
 
 func (channel *Channel) Save() error {
@@ -331,7 +448,14 @@ func UpdateChannelStatusById(id int, status int, reason string) bool {
 	channel, err := GetChannelById(id, true)
 	if err != nil {
 		// find channel by id error, directly update status
-		result := DB.Model(&Channel{}).Where("id = ?", id).Update("status", status)
+		updateData := map[string]interface{}{"status": status}
+
+		// 如果是因为次数限制被自动禁用，记录禁用时间
+		if status == common.ChannelStatusAutoDisabled && strings.Contains(reason, "次数已达到限制") {
+			updateData["last_reset_time"] = time.Now().Unix()
+		}
+
+		result := DB.Model(&Channel{}).Where("id = ?", id).Updates(updateData)
 		if result.Error != nil {
 			common.SysError("failed to update channel status: " + result.Error.Error())
 			return false
@@ -349,6 +473,12 @@ func UpdateChannelStatusById(id int, status int, reason string) bool {
 		info["status_time"] = common.GetTimestamp()
 		channel.SetOtherInfo(info)
 		channel.Status = status
+
+		// 如果是因为次数限制被自动禁用，且启用了自动重置，记录禁用时间
+		if status == common.ChannelStatusAutoDisabled && channel.GetAutoResetEnabled() && strings.Contains(reason, "次数已达到限制") {
+			channel.LastResetTime = time.Now().Unix()
+		}
+
 		err = channel.Save()
 		if err != nil {
 			common.SysError("failed to update channel status: " + err.Error())
@@ -434,10 +564,25 @@ func UpdateChannelUsedQuota(id int, quota int) {
 	updateChannelUsedQuota(id, quota)
 }
 
+func UpdateChannelUsedCount(id int, count int) {
+	if common.BatchUpdateEnabled {
+		addNewRecord(BatchUpdateTypeChannelUsedCount, id, count)
+		return
+	}
+	updateChannelUsedCount(id, count)
+}
+
 func updateChannelUsedQuota(id int, quota int) {
 	err := DB.Model(&Channel{}).Where("id = ?", id).Update("used_quota", gorm.Expr("used_quota + ?", quota)).Error
 	if err != nil {
 		common.SysError("failed to update channel used quota: " + err.Error())
+	}
+}
+
+func updateChannelUsedCount(id int, count int) {
+	err := DB.Model(&Channel{}).Where("id = ?", id).Update("used_count", gorm.Expr("used_count + ?", count)).Error
+	if err != nil {
+		common.SysError("failed to update channel used count: " + err.Error())
 	}
 }
 
@@ -582,4 +727,138 @@ func BatchSetChannelTag(ids []int, tag *string) error {
 
 	// 提交事务
 	return tx.Commit().Error
+}
+
+// GetChannelsWithQuotaLimitEnabled 获取所有启用限额的渠道
+func GetChannelsWithQuotaLimitEnabled() ([]*Channel, error) {
+	var channels []*Channel
+	err := DB.Where("quota_limit_enabled = ? AND status = ?", true, common.ChannelStatusEnabled).Find(&channels).Error
+	return channels, err
+}
+
+// GetChannelsWithCountLimitEnabled 获取启用次数限制的渠道
+func GetChannelsWithCountLimitEnabled() ([]*Channel, error) {
+	var channels []*Channel
+	err := DB.Where("count_limit_enabled = ? AND status = ?", true, common.ChannelStatusEnabled).Find(&channels).Error
+	return channels, err
+}
+
+// GetChannelsWithAnyLimitEnabled 获取启用任何限制的渠道
+func GetChannelsWithAnyLimitEnabled() ([]*Channel, error) {
+	var channels []*Channel
+	err := DB.Where("(quota_limit_enabled = ? OR count_limit_enabled = ?) AND status = ?", true, true, common.ChannelStatusEnabled).Find(&channels).Error
+	return channels, err
+}
+
+// CheckAndResetChannels 检查并重置需要自动重置的渠道
+func CheckAndResetChannels() (int, error) {
+	// 获取所有启用了自动重置且被自动禁用的渠道
+	var channels []*Channel
+	err := DB.Where("auto_reset_enabled = ? AND status = ? AND last_reset_time > 0", true, common.ChannelStatusAutoDisabled).Find(&channels).Error
+	if err != nil {
+		return 0, err
+	}
+
+	resetCount := 0
+	currentTime := time.Now().Unix()
+
+	for _, channel := range channels {
+		// 检查是否到了重置时间（从禁用时间开始计算）
+		if channel.GetAutoResetInterval() > 0 && currentTime-channel.LastResetTime >= channel.GetAutoResetInterval() {
+			// 计算禁用时长
+			disabledDuration := currentTime - channel.LastResetTime
+
+			// 重置次数并重新启用渠道
+			channel.UsedCount = 0
+			channel.LastResetTime = 0 // 重置后清空禁用时间
+			channel.Status = common.ChannelStatusEnabled
+
+			err = DB.Save(channel).Error
+			if err != nil {
+				common.SysError(fmt.Sprintf("failed to reset channel %d: %s", channel.Id, err.Error()))
+				continue
+			}
+
+			// 更新缓存中的渠道状态
+			if common.MemoryCacheEnabled {
+				CacheUpdateChannelStatus(channel.Id, common.ChannelStatusEnabled)
+			}
+
+			// 更新能力状态
+			err = UpdateAbilityStatus(channel.Id, true)
+			if err != nil {
+				common.SysError(fmt.Sprintf("failed to update ability status for channel %d: %s", channel.Id, err.Error()))
+			}
+
+			resetCount++
+			common.SysLog(fmt.Sprintf("渠道 %s (ID: %d) 自动重置次数限制并重新启用，禁用时长: %d秒", channel.Name, channel.Id, disabledDuration))
+		}
+	}
+
+	return resetCount, nil
+}
+
+// CheckAndDisableOverQuotaChannels 检查并禁用超过限额的渠道
+func CheckAndDisableOverQuotaChannels() (int, error) {
+	channels, err := GetChannelsWithAnyLimitEnabled()
+	if err != nil {
+		return 0, err
+	}
+
+	disabledCount := 0
+	for _, channel := range channels {
+		if channel.CheckQuotaLimit() {
+			// 禁用渠道
+			var reason string
+			if channel.GetQuotaLimitEnabled() && channel.UsedQuota >= channel.GetQuotaLimit() {
+				reason = fmt.Sprintf("渠道额度已达到限制，限额: %d，已用: %d", channel.GetQuotaLimit(), channel.UsedQuota)
+			} else if channel.GetCountLimitEnabled() && channel.UsedCount >= channel.GetCountLimit() {
+				reason = fmt.Sprintf("渠道次数已达到限制，限制: %d，已用: %d", channel.GetCountLimit(), channel.UsedCount)
+			}
+
+			success := UpdateChannelStatusById(channel.Id, common.ChannelStatusAutoDisabled, reason)
+			if !success {
+				common.SysError("failed to disable channel due to limit")
+				continue
+			}
+			disabledCount++
+			common.SysLog(fmt.Sprintf("渠道 %s (ID: %d) 被自动禁用：%s", channel.Name, channel.Id, reason))
+		}
+	}
+
+	return disabledCount, nil
+}
+
+// ChannelQuotaCheckTask 渠道限额检查定时任务
+func ChannelQuotaCheckTask() {
+	for {
+		// 等待指定的检查间隔
+		time.Sleep(time.Duration(common.ChannelQuotaCheckInterval) * time.Second)
+
+		common.SysLog("开始检查渠道限额和自动重置...")
+
+		// 检查并禁用超过限额的渠道
+		disabledCount, err := CheckAndDisableOverQuotaChannels()
+		if err != nil {
+			common.SysError("渠道限额检查失败: " + err.Error())
+		} else {
+			if disabledCount > 0 {
+				common.SysLog(fmt.Sprintf("渠道限额检查完成，共禁用 %d 个渠道", disabledCount))
+			}
+		}
+
+		// 检查并重置需要自动重置的渠道
+		resetCount, err := CheckAndResetChannels()
+		if err != nil {
+			common.SysError("渠道自动重置检查失败: " + err.Error())
+		} else {
+			if resetCount > 0 {
+				common.SysLog(fmt.Sprintf("渠道自动重置检查完成，共重置 %d 个渠道", resetCount))
+			}
+		}
+
+		if disabledCount == 0 && resetCount == 0 {
+			common.SysLog("渠道检查完成，无渠道需要禁用或重置")
+		}
+	}
 }

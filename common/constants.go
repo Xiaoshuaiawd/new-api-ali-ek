@@ -28,6 +28,9 @@ var DataExportInterval = 5         // unit: minute
 var DataExportDefaultTime = "hour" // unit: minute
 var DefaultCollapseSidebar = false // default value of collapse sidebar
 
+// 渠道限额检查相关配置
+var ChannelQuotaCheckInterval = 300 // unit: second, 默认5分钟检查一次
+
 // Any options with "Secret", "Token" in its key won't be return by GetOptions
 
 var SessionSecret = uuid.New().String()

@@ -112,6 +112,9 @@ func main() {
 	// 数据看板
 	go model.UpdateQuotaData()
 
+	// 渠道限额检查定时任务
+	go model.ChannelQuotaCheckTask()
+
 	if os.Getenv("CHANNEL_UPDATE_FREQUENCY") != "" {
 		frequency, err := strconv.Atoi(os.Getenv("CHANNEL_UPDATE_FREQUENCY"))
 		if err != nil {

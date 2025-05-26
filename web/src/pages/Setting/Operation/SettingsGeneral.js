@@ -27,6 +27,7 @@ export default function GeneralSettings(props) {
     'general_setting.docs_link': '',
     QuotaPerUnit: '',
     RetryTimes: '',
+    ChannelQuotaCheckInterval: '',
     DisplayInCurrencyEnabled: false,
     DisplayTokenStatEnabled: false,
     DefaultCollapseSidebar: false,
@@ -79,6 +80,11 @@ export default function GeneralSettings(props) {
 
   useEffect(() => {
     const currentInputs = {};
+    // 首先设置默认值
+    for (let key in inputs) {
+      currentInputs[key] = inputs[key];
+    }
+    // 然后用后端返回的值覆盖
     for (let key in props.options) {
       if (Object.keys(inputs).includes(key)) {
         currentInputs[key] = props.options[key];
@@ -141,6 +147,16 @@ export default function GeneralSettings(props) {
                   initValue={''}
                   placeholder={t('失败重试次数')}
                   onChange={handleFieldChange('RetryTimes')}
+                  showClear
+                />
+              </Col>
+              <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+                <Form.Input
+                  field={'ChannelQuotaCheckInterval'}
+                  label={t('渠道限额检查间隔（秒）')}
+                  initValue={''}
+                  placeholder={t('渠道限额检查间隔，单位秒，默认300秒')}
+                  onChange={handleFieldChange('ChannelQuotaCheckInterval')}
                   showClear
                 />
               </Col>

@@ -442,6 +442,7 @@ func postConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo,
 	} else {
 		model.UpdateUserUsedQuotaAndRequestCount(relayInfo.UserId, quota)
 		model.UpdateChannelUsedQuota(relayInfo.ChannelId, quota)
+		model.UpdateChannelUsedCount(relayInfo.ChannelId, 1)
 	}
 
 	quotaDelta := quota - preConsumedQuota

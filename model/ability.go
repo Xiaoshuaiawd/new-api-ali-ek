@@ -50,7 +50,7 @@ func getPriority(group string, model string, retry int) (int, error) {
 	err := DB.Model(&Ability{}).
 		Select("DISTINCT(priority)").
 		Where(groupCol+" = ? and model = ? and enabled = "+trueVal, group, model).
-		Order("priority DESC"). // 按优先级降序排序
+		Order("priority DESC").              // 按优先级降序排序
 		Pluck("priority", &priorities).Error // Pluck用于将查询的结果直接扫描到一个切片中
 
 	if err != nil {
@@ -106,26 +106,42 @@ func GetRandomSatisfiedChannel(group string, model string, retry int) (*Channel,
 	if err != nil {
 		return nil, err
 	}
-	channel := Channel{}
-	if len(abilities) > 0 {
-		// Randomly choose one
-		weightSum := uint(0)
-		for _, ability_ := range abilities {
-			weightSum += ability_.Weight + 10
+
+	// 过滤掉超过限额的渠道
+	var validAbilities []Ability
+	for _, ability := range abilities {
+		channel := Channel{}
+		err = DB.First(&channel, "id = ?", ability.ChannelId).Error
+		if err != nil {
+			continue
 		}
-		// Randomly choose one
-		weight := common.GetRandomInt(int(weightSum))
-		for _, ability_ := range abilities {
-			weight -= int(ability_.Weight) + 10
-			//log.Printf("weight: %d, ability weight: %d", weight, *ability_.Weight)
-			if weight <= 0 {
-				channel.Id = ability_.ChannelId
-				break
-			}
+		// 检查渠道是否超过限额
+		if !channel.CheckQuotaLimit() {
+			validAbilities = append(validAbilities, ability)
 		}
-	} else {
-		return nil, errors.New("channel not found")
 	}
+
+	if len(validAbilities) == 0 {
+		return nil, errors.New("no available channel (all channels exceeded quota limit)")
+	}
+
+	channel := Channel{}
+	// Randomly choose one from valid channels
+	weightSum := uint(0)
+	for _, ability_ := range validAbilities {
+		weightSum += ability_.Weight + 10
+	}
+	// Randomly choose one
+	weight := common.GetRandomInt(int(weightSum))
+	for _, ability_ := range validAbilities {
+		weight -= int(ability_.Weight) + 10
+		//log.Printf("weight: %d, ability weight: %d", weight, *ability_.Weight)
+		if weight <= 0 {
+			channel.Id = ability_.ChannelId
+			break
+		}
+	}
+
 	err = DB.First(&channel, "id = ?", channel.Id).Error
 	return &channel, err
 }
