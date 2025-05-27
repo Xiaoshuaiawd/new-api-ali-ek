@@ -44,25 +44,6 @@ func relayHandler(c *gin.Context, relayMode int) *dto.OpenAIErrorWithStatusCode 
 		err = relay.TextHelper(c)
 	}
 
-	if constant2.ErrorLogEnabled && err != nil {
-		// 保存错误日志到mysql中
-		userId := c.GetInt("id")
-		tokenName := c.GetString("token_name")
-		modelName := c.GetString("original_model")
-		tokenId := c.GetInt("token_id")
-		userGroup := c.GetString("group")
-		channelId := c.GetInt("channel_id")
-		other := make(map[string]interface{})
-		other["error_type"] = err.Error.Type
-		other["error_code"] = err.Error.Code
-		other["status_code"] = err.StatusCode
-		other["channel_id"] = channelId
-		other["channel_name"] = c.GetString("channel_name")
-		other["channel_type"] = c.GetInt("channel_type")
-
-		model.RecordErrorLog(c, userId, channelId, modelName, tokenName, err.Error.Message, tokenId, 0, false, userGroup, other)
-	}
-
 	return err
 }
 
@@ -122,6 +103,31 @@ func Relay(c *gin.Context) {
 			common.LogError(c, fmt.Sprintf("origin 429 error: %s", openaiErr.Error.Message))
 			openaiErr.Error.Message = "当前分组上游负载已饱和，请稍后再试"
 		}
+		
+		// 只有在最终失败时才记录错误日志（重试成功的不算错误）
+		if constant2.ErrorLogEnabled {
+			userId := c.GetInt("id")
+			tokenName := c.GetString("token_name")
+			modelName := c.GetString("original_model")
+			tokenId := c.GetInt("token_id")
+			userGroup := c.GetString("group")
+			channelId := c.GetInt("channel_id")
+			other := make(map[string]interface{})
+			other["error_type"] = openaiErr.Error.Type
+			other["error_code"] = openaiErr.Error.Code
+			other["status_code"] = openaiErr.StatusCode
+			other["channel_id"] = channelId
+			other["channel_name"] = c.GetString("channel_name")
+			other["channel_type"] = c.GetInt("channel_type")
+			// 记录重试信息
+			useChannel := c.GetStringSlice("use_channel")
+			if len(useChannel) > 1 {
+				other["retry_channels"] = strings.Join(useChannel, "->")
+			}
+
+			model.RecordErrorLog(c, userId, channelId, modelName, tokenName, openaiErr.Error.Message, tokenId, 0, false, userGroup, other)
+		}
+		
 		openaiErr.Error.Message = common.MessageWithRequestId(openaiErr.Error.Message, requestId)
 		c.JSON(openaiErr.StatusCode, gin.H{
 			"error": openaiErr.Error,
@@ -203,6 +209,31 @@ func WssRelay(c *gin.Context) {
 		if openaiErr.StatusCode == http.StatusTooManyRequests {
 			openaiErr.Error.Message = "当前分组上游负载已饱和，请稍后再试"
 		}
+		
+		// 只有在最终失败时才记录错误日志（重试成功的不算错误）
+		if constant2.ErrorLogEnabled {
+			userId := c.GetInt("id")
+			tokenName := c.GetString("token_name")
+			modelName := c.GetString("original_model")
+			tokenId := c.GetInt("token_id")
+			userGroup := c.GetString("group")
+			channelId := c.GetInt("channel_id")
+			other := make(map[string]interface{})
+			other["error_type"] = openaiErr.Error.Type
+			other["error_code"] = openaiErr.Error.Code
+			other["status_code"] = openaiErr.StatusCode
+			other["channel_id"] = channelId
+			other["channel_name"] = c.GetString("channel_name")
+			other["channel_type"] = c.GetInt("channel_type")
+			// 记录重试信息
+			useChannel := c.GetStringSlice("use_channel")
+			if len(useChannel) > 1 {
+				other["retry_channels"] = strings.Join(useChannel, "->")
+			}
+
+			model.RecordErrorLog(c, userId, channelId, modelName, tokenName, openaiErr.Error.Message, tokenId, 0, false, userGroup, other)
+		}
+		
 		openaiErr.Error.Message = common.MessageWithRequestId(openaiErr.Error.Message, requestId)
 		helper.WssError(c, ws, openaiErr.Error)
 	}
@@ -262,6 +293,30 @@ func RelayClaude(c *gin.Context) {
 	}
 
 	if claudeErr != nil {
+		// 只有在最终失败时才记录错误日志（重试成功的不算错误）
+		if constant2.ErrorLogEnabled {
+			userId := c.GetInt("id")
+			tokenName := c.GetString("token_name")
+			modelName := c.GetString("original_model")
+			tokenId := c.GetInt("token_id")
+			userGroup := c.GetString("group")
+			channelId := c.GetInt("channel_id")
+			other := make(map[string]interface{})
+			other["error_type"] = claudeErr.Error.Type
+			other["error_code"] = "claude_error"
+			other["status_code"] = claudeErr.StatusCode
+			other["channel_id"] = channelId
+			other["channel_name"] = c.GetString("channel_name")
+			other["channel_type"] = c.GetInt("channel_type")
+			// 记录重试信息
+			useChannel := c.GetStringSlice("use_channel")
+			if len(useChannel) > 1 {
+				other["retry_channels"] = strings.Join(useChannel, "->")
+			}
+
+			model.RecordErrorLog(c, userId, channelId, modelName, tokenName, claudeErr.Error.Message, tokenId, 0, false, userGroup, other)
+		}
+		
 		claudeErr.Error.Message = common.MessageWithRequestId(claudeErr.Error.Message, requestId)
 		c.JSON(claudeErr.StatusCode, gin.H{
 			"type":  "error",
@@ -458,6 +513,31 @@ func RelayTask(c *gin.Context) {
 		if taskErr.StatusCode == http.StatusTooManyRequests {
 			taskErr.Message = "当前分组上游负载已饱和，请稍后再试"
 		}
+		
+		// 只有在最终失败时才记录错误日志（重试成功的不算错误）
+		if constant2.ErrorLogEnabled {
+			userId := c.GetInt("id")
+			tokenName := c.GetString("token_name")
+			modelName := c.GetString("original_model")
+			tokenId := c.GetInt("token_id")
+			userGroup := c.GetString("group")
+			channelId := c.GetInt("channel_id")
+			other := make(map[string]interface{})
+			other["error_type"] = "task_error"
+			other["error_code"] = taskErr.Code
+			other["status_code"] = taskErr.StatusCode
+			other["channel_id"] = channelId
+			other["channel_name"] = c.GetString("channel_name")
+			other["channel_type"] = c.GetInt("channel_type")
+			// 记录重试信息
+			useChannel := c.GetStringSlice("use_channel")
+			if len(useChannel) > 1 {
+				other["retry_channels"] = strings.Join(useChannel, "->")
+			}
+
+			model.RecordErrorLog(c, userId, channelId, modelName, tokenName, taskErr.Message, tokenId, 0, false, userGroup, other)
+		}
+		
 		c.JSON(taskErr.StatusCode, taskErr)
 	}
 }
