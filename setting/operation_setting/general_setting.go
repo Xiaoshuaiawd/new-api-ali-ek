@@ -3,16 +3,18 @@ package operation_setting
 import "one-api/setting/config"
 
 type GeneralSetting struct {
-	DocsLink            string `json:"docs_link"`
-	PingIntervalEnabled bool   `json:"ping_interval_enabled"`
-	PingIntervalSeconds int    `json:"ping_interval_seconds"`
+	DocsLink                string `json:"docs_link"`
+	PingIntervalEnabled     bool   `json:"ping_interval_enabled"`
+	PingIntervalSeconds     int    `json:"ping_interval_seconds"`
+	RetryDisableStatusCodes string `json:"retry_disable_status_codes"`
 }
 
 // 默认配置
 var generalSetting = GeneralSetting{
-	DocsLink:            "https://docs.newapi.pro",
-	PingIntervalEnabled: false,
-	PingIntervalSeconds: 60,
+	DocsLink:                "https://docs.newapi.pro",
+	PingIntervalEnabled:     false,
+	PingIntervalSeconds:     60,
+	RetryDisableStatusCodes: "401,403,429,500,502,503",
 }
 
 func init() {

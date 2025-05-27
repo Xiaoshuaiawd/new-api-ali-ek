@@ -8,6 +8,7 @@ import {
   Spin,
   Collapse,
   Modal,
+  Tooltip,
 } from '@douyinfe/semi-ui';
 import {
   compareObjects,
@@ -33,6 +34,7 @@ export default function GeneralSettings(props) {
     DefaultCollapseSidebar: false,
     DemoSiteEnabled: false,
     SelfUseModeEnabled: false,
+    'general_setting.retry_disable_status_codes': '',
   });
   const refForm = useRef();
   const [inputsRow, setInputsRow] = useState(inputs);
@@ -160,6 +162,18 @@ export default function GeneralSettings(props) {
                   showClear
                 />
               </Col>
+              <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+                <Tooltip content={t('遇到这些状态码时立即禁用渠道并重试其他渠道，而不是继续使用该渠道重试')}>
+                  <Form.Input
+                    field={'general_setting.retry_disable_status_codes'}
+                    label={t('立即禁用渠道的状态码')}
+                    initValue={''}
+                    placeholder={t('用逗号分隔，如：401,403,429,500,502,503')}
+                    onChange={handleFieldChange('general_setting.retry_disable_status_codes')}
+                    showClear
+                  />
+                </Tooltip>
+              </Col>
             </Row>
             <Row gutter={16}>
               <Col xs={24} sm={12} md={8} lg={8} xl={8}>
@@ -215,6 +229,7 @@ export default function GeneralSettings(props) {
                   onChange={handleFieldChange('SelfUseModeEnabled')}
                 />
               </Col>
+
             </Row>
             <Row>
               <Button size='default' onClick={onSubmit}>

@@ -93,6 +93,8 @@ const EditChannel = (props) => {
     count_limit: 0,
     auto_reset_enabled: false,
     auto_reset_interval: 0,
+    rpm_limit_enabled: false,
+    rpm_limit: 0,
   };
   const [batch, setBatch] = useState(false);
   const [autoBan, setAutoBan] = useState(true);
@@ -118,6 +120,7 @@ const EditChannel = (props) => {
       });
       return;
     }
+    
     setInputs((inputs) => ({ ...inputs, [name]: value }));
     if (name === 'type') {
       let localModels = [];
@@ -194,8 +197,10 @@ const EditChannel = (props) => {
         );
       }
       // 处理额度限制字段
-      if (data.quota_limit_enabled === undefined) {
+      if (data.quota_limit_enabled === undefined || data.quota_limit_enabled === null) {
         data.quota_limit_enabled = false;
+      } else {
+        data.quota_limit_enabled = Boolean(data.quota_limit_enabled);
       }
       // 将数据库中的token数量转换为金额显示（500000token = 1刀）
       if (data.quota_limit && data.quota_limit > 0) {
@@ -204,18 +209,31 @@ const EditChannel = (props) => {
         data.quota_limit = 0;
       }
       // 处理次数限制字段
-      if (data.count_limit_enabled === undefined) {
+      if (data.count_limit_enabled === undefined || data.count_limit_enabled === null) {
         data.count_limit_enabled = false;
+      } else {
+        data.count_limit_enabled = Boolean(data.count_limit_enabled);
       }
       if (data.count_limit === undefined) {
         data.count_limit = 0;
       }
       // 处理自动重置字段
-      if (data.auto_reset_enabled === undefined) {
+      if (data.auto_reset_enabled === undefined || data.auto_reset_enabled === null) {
         data.auto_reset_enabled = false;
+      } else {
+        data.auto_reset_enabled = Boolean(data.auto_reset_enabled);
       }
       if (data.auto_reset_interval === undefined) {
         data.auto_reset_interval = 0;
+      }
+      // 处理RPM限制字段
+      if (data.rpm_limit_enabled === undefined || data.rpm_limit_enabled === null) {
+        data.rpm_limit_enabled = false;
+      } else {
+        data.rpm_limit_enabled = Boolean(data.rpm_limit_enabled);
+      }
+      if (data.rpm_limit === undefined || data.rpm_limit === null) {
+        data.rpm_limit = 0;
       }
       setInputs(data);
       if (data.auto_ban === 0) {
@@ -404,6 +422,15 @@ const EditChannel = (props) => {
     } else {
       localInputs.auto_reset_interval = parseInt(localInputs.auto_reset_interval) || 0;
     }
+    
+    // 处理RPM限制相关字段
+    localInputs.rpm_limit_enabled = Boolean(localInputs.rpm_limit_enabled);
+    if (!localInputs.rpm_limit_enabled || localInputs.rpm_limit === undefined || localInputs.rpm_limit === '') {
+      localInputs.rpm_limit = 0;
+    } else {
+      localInputs.rpm_limit = parseInt(localInputs.rpm_limit) || 0;
+    }
+    
     if (isEdit) {
       res = await API.put(`/api/channel/`, {
         ...localInputs,
@@ -1186,10 +1213,11 @@ const EditChannel = (props) => {
               <Checkbox
                 name='quota_limit_enabled'
                 checked={Boolean(inputs.quota_limit_enabled)}
-                onChange={(checked) => {
-                  handleInputChange('quota_limit_enabled', checked);
+                onChange={() => {
+                  const newValue = !inputs.quota_limit_enabled;
+                  handleInputChange('quota_limit_enabled', newValue);
                   // 如果启用额度限制，则禁用次数限制
-                  if (checked) {
+                  if (newValue) {
                     handleInputChange('count_limit_enabled', false);
                   }
                 }}
@@ -1227,10 +1255,11 @@ const EditChannel = (props) => {
               <Checkbox
                 name='count_limit_enabled'
                 checked={Boolean(inputs.count_limit_enabled)}
-                onChange={(checked) => {
-                  handleInputChange('count_limit_enabled', checked);
+                onChange={() => {
+                  const newValue = !inputs.count_limit_enabled;
+                  handleInputChange('count_limit_enabled', newValue);
                   // 如果启用次数限制，则禁用额度限制
-                  if (checked) {
+                  if (newValue) {
                     handleInputChange('quota_limit_enabled', false);
                   }
                 }}
@@ -1267,8 +1296,8 @@ const EditChannel = (props) => {
                   <Checkbox
                     name='auto_reset_enabled'
                     checked={Boolean(inputs.auto_reset_enabled)}
-                    onChange={(checked) => {
-                      handleInputChange('auto_reset_enabled', checked);
+                    onChange={() => {
+                      handleInputChange('auto_reset_enabled', !inputs.auto_reset_enabled);
                     }}
                   />
                   <Typography.Text strong>
@@ -1300,6 +1329,43 @@ const EditChannel = (props) => {
                   </Typography.Text>
                 </div>
               )}
+            </div>
+          )}
+          <div style={{ marginTop: 10, display: 'flex' }}>
+            <Space>
+              <Checkbox
+                name='rpm_limit_enabled'
+                checked={Boolean(inputs.rpm_limit_enabled)}
+                onChange={() => {
+                  handleInputChange('rpm_limit_enabled', !inputs.rpm_limit_enabled);
+                }}
+              />
+              <Typography.Text strong>
+                {t('启用RPM限制（限制每分钟请求次数）')}
+              </Typography.Text>
+            </Space>
+          </div>
+          {inputs.rpm_limit_enabled && (
+            <div style={{ marginTop: 10 }}>
+              <Typography.Text strong>{t('RPM限制设置')}：</Typography.Text>
+              <Input
+                label={t('每分钟请求次数限制')}
+                name='rpm_limit'
+                placeholder={t('请输入每分钟最大请求次数，例如：20')}
+                onChange={(value) => {
+                  const number = parseInt(value);
+                  if (isNaN(number)) {
+                    handleInputChange('rpm_limit', value);
+                  } else {
+                    handleInputChange('rpm_limit', number);
+                  }
+                }}
+                value={inputs.rpm_limit}
+                autoComplete='new-password'
+              />
+              <Typography.Text type="secondary" style={{ fontSize: '12px' }}>
+                {t('说明：当渠道每分钟请求次数超过设置的限制时，将自动切换到其他渠道。例如：20表示每分钟最多20次请求')}
+              </Typography.Text>
             </div>
           )}
           <div style={{ marginTop: 10 }}>

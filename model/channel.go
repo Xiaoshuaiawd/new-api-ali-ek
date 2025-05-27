@@ -50,6 +50,12 @@ type Channel struct {
 	AutoResetEnabled  *bool  `json:"auto_reset_enabled" gorm:"default:false"`     // 是否启用自动重置
 	AutoResetInterval *int64 `json:"auto_reset_interval" gorm:"bigint;default:0"` // 自动重置间隔（秒）
 	LastResetTime     int64  `json:"last_reset_time" gorm:"bigint;default:0"`     // 禁用时间（用于自动重置计时）
+
+	// 渠道RPM限制相关字段
+	RPMLimitEnabled   *bool  `json:"rpm_limit_enabled" gorm:"default:false"`      // 是否启用RPM限制
+	RPMLimit          *int64 `json:"rpm_limit" gorm:"bigint;default:0"`           // RPM限制值（每分钟请求次数）
+	LastMinuteTime    int64  `json:"last_minute_time" gorm:"bigint;default:0"`    // 上一分钟的时间戳
+	CurrentMinuteUsed int64  `json:"current_minute_used" gorm:"bigint;default:0"` // 当前分钟已使用次数
 }
 
 func (channel *Channel) GetModels() []string {
@@ -210,6 +216,49 @@ func (channel *Channel) CheckCountLimit() bool {
 	// 这里不再处理自动重置，只检查是否超过限制
 
 	return channel.UsedCount >= limit
+}
+
+// CheckRPMLimit 检查渠道是否超过RPM限制
+func (channel *Channel) CheckRPMLimit() bool {
+	if !channel.GetRPMLimitEnabled() {
+		return false // 未启用RPM限制，不受限制
+	}
+
+	limit := channel.GetRPMLimit()
+	if limit <= 0 {
+		return false // 限制为0或负数，不受限制
+	}
+
+	currentTime := time.Now().Unix()
+	currentMinute := currentTime / 60 // 获取当前分钟的时间戳
+
+	// 如果是新的一分钟，重置计数器
+	if channel.LastMinuteTime != currentMinute {
+		channel.LastMinuteTime = currentMinute
+		channel.CurrentMinuteUsed = 0
+	}
+
+	// 检查是否超过RPM限制
+	return channel.CurrentMinuteUsed >= limit
+}
+
+// IncrementRPMUsage 增加RPM使用计数
+func (channel *Channel) IncrementRPMUsage() {
+	if !channel.GetRPMLimitEnabled() {
+		return
+	}
+
+	currentTime := time.Now().Unix()
+	currentMinute := currentTime / 60
+
+	// 如果是新的一分钟，重置计数器
+	if channel.LastMinuteTime != currentMinute {
+		channel.LastMinuteTime = currentMinute
+		channel.CurrentMinuteUsed = 0
+	}
+
+	// 增加使用计数
+	channel.CurrentMinuteUsed++
 }
 
 func (channel *Channel) Save() error {
@@ -450,8 +499,8 @@ func UpdateChannelStatusById(id int, status int, reason string) bool {
 		// find channel by id error, directly update status
 		updateData := map[string]interface{}{"status": status}
 
-		// 如果是因为次数限制被自动禁用，记录禁用时间
-		if status == common.ChannelStatusAutoDisabled && strings.Contains(reason, "次数已达到限制") {
+		// 如果是自动禁用，记录禁用时间（用于自动重置）
+		if status == common.ChannelStatusAutoDisabled {
 			updateData["last_reset_time"] = time.Now().Unix()
 		}
 
@@ -474,8 +523,8 @@ func UpdateChannelStatusById(id int, status int, reason string) bool {
 		channel.SetOtherInfo(info)
 		channel.Status = status
 
-		// 如果是因为次数限制被自动禁用，且启用了自动重置，记录禁用时间
-		if status == common.ChannelStatusAutoDisabled && channel.GetAutoResetEnabled() && strings.Contains(reason, "次数已达到限制") {
+		// 如果是自动禁用，且启用了自动重置，记录禁用时间
+		if status == common.ChannelStatusAutoDisabled && channel.GetAutoResetEnabled() {
 			channel.LastResetTime = time.Now().Unix()
 		}
 
@@ -768,10 +817,17 @@ func CheckAndResetChannels() (int, error) {
 			// 计算禁用时长
 			disabledDuration := currentTime - channel.LastResetTime
 
-			// 重置次数并重新启用渠道
+			// 重置次数、清除禁用原因并重新启用渠道
 			channel.UsedCount = 0
 			channel.LastResetTime = 0 // 重置后清空禁用时间
 			channel.Status = common.ChannelStatusEnabled
+
+			// 清除状态原因和时间信息
+			info := channel.GetOtherInfo()
+			delete(info, "status_reason")
+			delete(info, "status_time")
+			info["auto_reset_time"] = common.GetTimestamp()
+			channel.SetOtherInfo(info)
 
 			err = DB.Save(channel).Error
 			if err != nil {
@@ -791,7 +847,7 @@ func CheckAndResetChannels() (int, error) {
 			}
 
 			resetCount++
-			common.SysLog(fmt.Sprintf("渠道 %s (ID: %d) 自动重置次数限制并重新启用，禁用时长: %d秒", channel.Name, channel.Id, disabledDuration))
+			common.SysLog(fmt.Sprintf("渠道 %s (ID: %d) 自动重置并重新启用，禁用时长: %d秒", channel.Name, channel.Id, disabledDuration))
 		}
 	}
 
@@ -861,4 +917,26 @@ func ChannelQuotaCheckTask() {
 			common.SysLog("渠道检查完成，无渠道需要禁用或重置")
 		}
 	}
+}
+
+func (channel *Channel) GetRPMLimitEnabled() bool {
+	if channel.RPMLimitEnabled == nil {
+		return false
+	}
+	return *channel.RPMLimitEnabled
+}
+
+func (channel *Channel) GetRPMLimit() int64 {
+	if channel.RPMLimit == nil {
+		return 0
+	}
+	return *channel.RPMLimit
+}
+
+func (channel *Channel) SetRPMLimitEnabled(enabled bool) {
+	channel.RPMLimitEnabled = &enabled
+}
+
+func (channel *Channel) SetRPMLimit(limit int64) {
+	channel.RPMLimit = &limit
 }

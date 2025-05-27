@@ -81,10 +81,28 @@ func Relay(c *gin.Context) {
 			break
 		}
 
+		// 检查RPM限制
+		if service.CheckChannelRPMLimit(channel.Id) {
+			common.LogInfo(c, fmt.Sprintf("渠道 #%d RPM限制超限，切换到其他渠道", channel.Id))
+			continue // 跳过此渠道，尝试下一个
+		}
+
+		// 记录RPM使用次数
+		service.IncrementChannelRPMUsage(channel.Id)
+
 		openaiErr = relayRequest(c, relayMode, channel)
 
 		if openaiErr == nil {
 			return // 成功处理请求，直接返回
+		}
+
+		// 检查是否需要立即禁用渠道并继续重试
+		if service.ShouldImmediatelyDisableAndRetry(openaiErr) && channel.GetAutoBan() {
+			// 立即禁用渠道
+			service.DisableChannel(channel.Id, channel.Name, fmt.Sprintf("立即禁用 - 状态码: %d, 错误: %s", openaiErr.StatusCode, openaiErr.Error.Message))
+			common.LogError(c, fmt.Sprintf("立即禁用渠道 #%d，状态码: %d，继续重试其他渠道", channel.Id, openaiErr.StatusCode))
+			// 继续重试其他渠道
+			continue
 		}
 
 		go processChannelError(c, channel.Id, channel.Type, channel.Name, channel.GetAutoBan(), openaiErr)
@@ -145,10 +163,28 @@ func WssRelay(c *gin.Context) {
 			break
 		}
 
+		// 检查RPM限制
+		if service.CheckChannelRPMLimit(channel.Id) {
+			common.LogInfo(c, fmt.Sprintf("渠道 #%d RPM限制超限，切换到其他渠道", channel.Id))
+			continue // 跳过此渠道，尝试下一个
+		}
+
+		// 记录RPM使用次数
+		service.IncrementChannelRPMUsage(channel.Id)
+
 		openaiErr = wssRequest(c, ws, relayMode, channel)
 
 		if openaiErr == nil {
 			return // 成功处理请求，直接返回
+		}
+
+		// 检查是否需要立即禁用渠道并继续重试
+		if service.ShouldImmediatelyDisableAndRetry(openaiErr) && channel.GetAutoBan() {
+			// 立即禁用渠道
+			service.DisableChannel(channel.Id, channel.Name, fmt.Sprintf("立即禁用 - 状态码: %d, 错误: %s", openaiErr.StatusCode, openaiErr.Error.Message))
+			common.LogError(c, fmt.Sprintf("立即禁用渠道 #%d，状态码: %d，继续重试其他渠道", channel.Id, openaiErr.StatusCode))
+			// 继续重试其他渠道
+			continue
 		}
 
 		go processChannelError(c, channel.Id, channel.Type, channel.Name, channel.GetAutoBan(), openaiErr)
@@ -187,6 +223,15 @@ func RelayClaude(c *gin.Context) {
 			break
 		}
 
+		// 检查RPM限制
+		if service.CheckChannelRPMLimit(channel.Id) {
+			common.LogInfo(c, fmt.Sprintf("渠道 #%d RPM限制超限，切换到其他渠道", channel.Id))
+			continue // 跳过此渠道，尝试下一个
+		}
+
+		// 记录RPM使用次数
+		service.IncrementChannelRPMUsage(channel.Id)
+
 		claudeErr = claudeRequest(c, channel)
 
 		if claudeErr == nil {
@@ -194,6 +239,15 @@ func RelayClaude(c *gin.Context) {
 		}
 
 		openaiErr := service.ClaudeErrorToOpenAIError(claudeErr)
+
+		// 检查是否需要立即禁用渠道并继续重试
+		if service.ShouldImmediatelyDisableAndRetry(openaiErr) && channel.GetAutoBan() {
+			// 立即禁用渠道
+			service.DisableChannel(channel.Id, channel.Name, fmt.Sprintf("立即禁用 - 状态码: %d, 错误: %s", openaiErr.StatusCode, openaiErr.Error.Message))
+			common.LogError(c, fmt.Sprintf("立即禁用渠道 #%d，状态码: %d，继续重试其他渠道", channel.Id, openaiErr.StatusCode))
+			// 继续重试其他渠道
+			continue
+		}
 
 		go processChannelError(c, channel.Id, channel.Type, channel.Name, channel.GetAutoBan(), openaiErr)
 
@@ -278,33 +332,16 @@ func shouldRetry(c *gin.Context, openaiErr *dto.OpenAIErrorWithStatusCode, retry
 	if _, ok := c.Get("specific_channel_id"); ok {
 		return false
 	}
-	if openaiErr.StatusCode == http.StatusTooManyRequests {
-		return true
-	}
-	if openaiErr.StatusCode == 307 {
-		return true
-	}
-	if openaiErr.StatusCode/100 == 5 {
-		// 超时不重试
-		if openaiErr.StatusCode == 504 || openaiErr.StatusCode == 524 {
-			return false
-		}
-		return true
-	}
-	if openaiErr.StatusCode == http.StatusBadRequest {
-		channelType := c.GetInt("channel_type")
-		if channelType == common.ChannelTypeAnthropic {
-			return true
-		}
-		return false
-	}
-	if openaiErr.StatusCode == 408 {
-		// azure处理超时不重试
-		return false
-	}
+	// 2xx 状态码表示成功，不需要重试
 	if openaiErr.StatusCode/100 == 2 {
 		return false
 	}
+	// 对于超时相关的状态码，不重试（保持原有逻辑）
+	if openaiErr.StatusCode == 504 || openaiErr.StatusCode == 524 || openaiErr.StatusCode == 408 {
+		return false
+	}
+
+	// 所有其他错误都重试
 	return true
 }
 
@@ -375,32 +412,42 @@ func RelayNotFound(c *gin.Context) {
 }
 
 func RelayTask(c *gin.Context) {
-	retryTimes := common.RetryTimes
-	channelId := c.GetInt("channel_id")
 	relayMode := c.GetInt("relay_mode")
 	group := c.GetString("group")
 	originalModel := c.GetString("original_model")
-	c.Set("use_channel", []string{fmt.Sprintf("%d", channelId)})
-	taskErr := taskRelayHandler(c, relayMode)
-	if taskErr == nil {
-		retryTimes = 0
-	}
-	for i := 0; shouldRetryTaskRelay(c, channelId, taskErr, retryTimes) && i < retryTimes; i++ {
-		channel, err := model.CacheGetRandomSatisfiedChannel(group, originalModel, i)
+	var taskErr *dto.TaskError
+
+	for i := 0; i <= common.RetryTimes; i++ {
+		channel, err := getChannel(c, group, originalModel, i)
 		if err != nil {
-			common.LogError(c, fmt.Sprintf("CacheGetRandomSatisfiedChannel failed: %s", err.Error()))
+			common.LogError(c, err.Error())
+			taskErr = service.TaskErrorWrapperLocal(err, "get_channel_failed", http.StatusInternalServerError)
 			break
 		}
-		channelId = channel.Id
-		useChannel := c.GetStringSlice("use_channel")
-		useChannel = append(useChannel, fmt.Sprintf("%d", channelId))
-		c.Set("use_channel", useChannel)
-		common.LogInfo(c, fmt.Sprintf("using channel #%d to retry (remain times %d)", channel.Id, i))
-		middleware.SetupContextForSelectedChannel(c, channel, originalModel)
 
-		requestBody, err := common.GetRequestBody(c)
-		c.Request.Body = io.NopCloser(bytes.NewBuffer(requestBody))
+		// 使用新的渠道ID更新used_channel列表
+		useChannel := c.GetStringSlice("use_channel")
+		useChannel = append(useChannel, fmt.Sprintf("%d", channel.Id))
+		c.Set("use_channel", useChannel)
+
 		taskErr = taskRelayHandler(c, relayMode)
+
+		if taskErr == nil {
+			return // 成功处理请求，直接返回
+		}
+
+		// 检查是否需要立即禁用渠道并继续重试
+		if service.ShouldImmediatelyDisableAndRetryTask(taskErr) && channel.GetAutoBan() {
+			// 立即禁用渠道
+			service.DisableChannel(channel.Id, channel.Name, fmt.Sprintf("立即禁用 - 状态码: %d, 错误: %s", taskErr.StatusCode, taskErr.Message))
+			common.LogError(c, fmt.Sprintf("立即禁用渠道 #%d，状态码: %d，继续重试其他渠道", channel.Id, taskErr.StatusCode))
+			// 继续重试其他渠道
+			continue
+		}
+
+		if !shouldRetryTaskRelay(c, channel.Id, taskErr, common.RetryTimes-i) {
+			break
+		}
 	}
 	useChannel := c.GetStringSlice("use_channel")
 	if len(useChannel) > 1 {
@@ -436,31 +483,17 @@ func shouldRetryTaskRelay(c *gin.Context, channelId int, taskErr *dto.TaskError,
 	if _, ok := c.Get("specific_channel_id"); ok {
 		return false
 	}
-	if taskErr.StatusCode == http.StatusTooManyRequests {
-		return true
-	}
-	if taskErr.StatusCode == 307 {
-		return true
-	}
-	if taskErr.StatusCode/100 == 5 {
-		// 超时不重试
-		if taskErr.StatusCode == 504 || taskErr.StatusCode == 524 {
-			return false
-		}
-		return true
-	}
-	if taskErr.StatusCode == http.StatusBadRequest {
-		return false
-	}
-	if taskErr.StatusCode == 408 {
-		// azure处理超时不重试
-		return false
-	}
 	if taskErr.LocalError {
 		return false
 	}
 	if taskErr.StatusCode/100 == 2 {
 		return false
 	}
+	// 超时不重试
+	if taskErr.StatusCode == 504 || taskErr.StatusCode == 524 || taskErr.StatusCode == 408 {
+		return false
+	}
+
+	// 所有其他错误都重试
 	return true
 }
