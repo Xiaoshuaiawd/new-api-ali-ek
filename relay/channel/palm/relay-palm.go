@@ -3,7 +3,6 @@ package palm
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/gin-gonic/gin"
 	"io"
 	"net/http"
 	"one-api/common"
@@ -11,6 +10,8 @@ import (
 	"one-api/dto"
 	"one-api/relay/helper"
 	"one-api/service"
+
+	"github.com/gin-gonic/gin"
 )
 
 // https://developers.generativeai.google/api/rest/generativelanguage/models/generateMessage#request-body
@@ -157,6 +158,12 @@ func palmHandler(c *gin.Context, resp *http.Response, promptTokens int, model st
 		}, nil
 	}
 	fullTextResponse := responsePaLM2OpenAI(&palmResponse)
+
+	// 检测空回复
+	if service.IsEmptyResponse(fullTextResponse) {
+		return service.CreateEmptyResponseError(), nil
+	}
+
 	completionTokens, _ := service.CountTextToken(palmResponse.Candidates[0].Content, model)
 	usage := dto.Usage{
 		PromptTokens:     promptTokens,

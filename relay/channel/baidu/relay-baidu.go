@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/gin-gonic/gin"
 	"io"
 	"net/http"
 	"one-api/common"
@@ -16,6 +15,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/gin-gonic/gin"
 )
 
 // https://cloud.baidu.com/doc/WENXINWORKSHOP/s/flfmc9do2
@@ -200,6 +201,12 @@ func baiduHandler(c *gin.Context, resp *http.Response) (*dto.OpenAIErrorWithStat
 		}, nil
 	}
 	fullTextResponse := responseBaidu2OpenAI(&baiduResponse)
+
+	// 检测空回复
+	if service.IsEmptyResponse(fullTextResponse) {
+		return service.CreateEmptyResponseError(), nil
+	}
+
 	jsonResponse, err := json.Marshal(fullTextResponse)
 	if err != nil {
 		return service.OpenAIErrorWrapper(err, "marshal_response_body_failed", http.StatusInternalServerError), nil

@@ -98,14 +98,21 @@ func Relay(c *gin.Context) {
 		common.LogInfo(c, retryLogStr)
 	}
 
+	// 如果重试成功（没有错误），也要显示重试过程
+	if openaiErr == nil && len(useChannel) > 1 {
+		retryLogStr := fmt.Sprintf("重试成功：%s", strings.Trim(strings.Join(strings.Fields(fmt.Sprint(useChannel)), "->"), "[]"))
+		common.LogInfo(c, retryLogStr)
+	}
+
 	if openaiErr != nil {
 		if openaiErr.StatusCode == http.StatusTooManyRequests {
 			common.LogError(c, fmt.Sprintf("origin 429 error: %s", openaiErr.Error.Message))
 			openaiErr.Error.Message = "当前分组上游负载已饱和，请稍后再试"
 		}
-		
+
 		// 只有在最终失败时才记录错误日志（重试成功的不算错误）
-		if constant2.ErrorLogEnabled {
+		// 空回复错误不记录到错误日志中
+		if constant2.ErrorLogEnabled && openaiErr.Error.Type != "empty_response" {
 			userId := c.GetInt("id")
 			tokenName := c.GetString("token_name")
 			modelName := c.GetString("original_model")
@@ -127,7 +134,7 @@ func Relay(c *gin.Context) {
 
 			model.RecordErrorLog(c, userId, channelId, modelName, tokenName, openaiErr.Error.Message, tokenId, 0, false, userGroup, other)
 		}
-		
+
 		openaiErr.Error.Message = common.MessageWithRequestId(openaiErr.Error.Message, requestId)
 		c.JSON(openaiErr.StatusCode, gin.H{
 			"error": openaiErr.Error,
@@ -205,13 +212,20 @@ func WssRelay(c *gin.Context) {
 		common.LogInfo(c, retryLogStr)
 	}
 
+	// 如果重试成功（没有错误），也要显示重试过程
+	if openaiErr == nil && len(useChannel) > 1 {
+		retryLogStr := fmt.Sprintf("重试成功：%s", strings.Trim(strings.Join(strings.Fields(fmt.Sprint(useChannel)), "->"), "[]"))
+		common.LogInfo(c, retryLogStr)
+	}
+
 	if openaiErr != nil {
 		if openaiErr.StatusCode == http.StatusTooManyRequests {
 			openaiErr.Error.Message = "当前分组上游负载已饱和，请稍后再试"
 		}
-		
+
 		// 只有在最终失败时才记录错误日志（重试成功的不算错误）
-		if constant2.ErrorLogEnabled {
+		// 空回复错误不记录到错误日志中
+		if constant2.ErrorLogEnabled && openaiErr.Error.Type != "empty_response" {
 			userId := c.GetInt("id")
 			tokenName := c.GetString("token_name")
 			modelName := c.GetString("original_model")
@@ -233,7 +247,7 @@ func WssRelay(c *gin.Context) {
 
 			model.RecordErrorLog(c, userId, channelId, modelName, tokenName, openaiErr.Error.Message, tokenId, 0, false, userGroup, other)
 		}
-		
+
 		openaiErr.Error.Message = common.MessageWithRequestId(openaiErr.Error.Message, requestId)
 		helper.WssError(c, ws, openaiErr.Error)
 	}
@@ -292,31 +306,42 @@ func RelayClaude(c *gin.Context) {
 		common.LogInfo(c, retryLogStr)
 	}
 
+	// 如果重试成功（没有错误），也要显示重试过程
+	if claudeErr == nil && len(useChannel) > 1 {
+		retryLogStr := fmt.Sprintf("重试成功：%s", strings.Trim(strings.Join(strings.Fields(fmt.Sprint(useChannel)), "->"), "[]"))
+		common.LogInfo(c, retryLogStr)
+	}
+
 	if claudeErr != nil {
 		// 只有在最终失败时才记录错误日志（重试成功的不算错误）
+		// 空回复错误不记录到错误日志中
 		if constant2.ErrorLogEnabled {
-			userId := c.GetInt("id")
-			tokenName := c.GetString("token_name")
-			modelName := c.GetString("original_model")
-			tokenId := c.GetInt("token_id")
-			userGroup := c.GetString("group")
-			channelId := c.GetInt("channel_id")
-			other := make(map[string]interface{})
-			other["error_type"] = claudeErr.Error.Type
-			other["error_code"] = "claude_error"
-			other["status_code"] = claudeErr.StatusCode
-			other["channel_id"] = channelId
-			other["channel_name"] = c.GetString("channel_name")
-			other["channel_type"] = c.GetInt("channel_type")
-			// 记录重试信息
-			useChannel := c.GetStringSlice("use_channel")
-			if len(useChannel) > 1 {
-				other["retry_channels"] = strings.Join(useChannel, "->")
-			}
+			// 将Claude错误转换为OpenAI错误格式进行检查
+			openaiErr := service.ClaudeErrorToOpenAIError(claudeErr)
+			if openaiErr.Error.Type != "empty_response" {
+				userId := c.GetInt("id")
+				tokenName := c.GetString("token_name")
+				modelName := c.GetString("original_model")
+				tokenId := c.GetInt("token_id")
+				userGroup := c.GetString("group")
+				channelId := c.GetInt("channel_id")
+				other := make(map[string]interface{})
+				other["error_type"] = claudeErr.Error.Type
+				other["error_code"] = "claude_error"
+				other["status_code"] = claudeErr.StatusCode
+				other["channel_id"] = channelId
+				other["channel_name"] = c.GetString("channel_name")
+				other["channel_type"] = c.GetInt("channel_type")
+				// 记录重试信息
+				useChannel := c.GetStringSlice("use_channel")
+				if len(useChannel) > 1 {
+					other["retry_channels"] = strings.Join(useChannel, "->")
+				}
 
-			model.RecordErrorLog(c, userId, channelId, modelName, tokenName, claudeErr.Error.Message, tokenId, 0, false, userGroup, other)
+				model.RecordErrorLog(c, userId, channelId, modelName, tokenName, claudeErr.Error.Message, tokenId, 0, false, userGroup, other)
+			}
 		}
-		
+
 		claudeErr.Error.Message = common.MessageWithRequestId(claudeErr.Error.Message, requestId)
 		c.JSON(claudeErr.StatusCode, gin.H{
 			"type":  "error",
@@ -387,6 +412,12 @@ func shouldRetry(c *gin.Context, openaiErr *dto.OpenAIErrorWithStatusCode, retry
 	if _, ok := c.Get("specific_channel_id"); ok {
 		return false
 	}
+
+	// 特殊处理：空回复错误需要静默重试
+	if openaiErr.Error.Type == "empty_response" {
+		return true
+	}
+
 	// 2xx 状态码表示成功，不需要重试
 	if openaiErr.StatusCode/100 == 2 {
 		return false
@@ -403,6 +434,12 @@ func shouldRetry(c *gin.Context, openaiErr *dto.OpenAIErrorWithStatusCode, retry
 func processChannelError(c *gin.Context, channelId int, channelType int, channelName string, autoBan bool, err *dto.OpenAIErrorWithStatusCode) {
 	// 不要使用context获取渠道信息，异步处理时可能会出现渠道信息不一致的情况
 	// do not use context to get channel info, there may be inconsistent channel info when processing asynchronously
+
+	// 空回复错误不记录日志，直接返回
+	if err.Error.Type == "empty_response" {
+		return
+	}
+
 	common.LogError(c, fmt.Sprintf("relay error (channel #%d, status code: %d): %s", channelId, err.StatusCode, err.Error.Message))
 	if service.ShouldDisableChannel(channelType, err) && autoBan {
 		service.DisableChannel(channelId, channelName, err.Error.Message)
@@ -509,11 +546,18 @@ func RelayTask(c *gin.Context) {
 		retryLogStr := fmt.Sprintf("重试：%s", strings.Trim(strings.Join(strings.Fields(fmt.Sprint(useChannel)), "->"), "[]"))
 		common.LogInfo(c, retryLogStr)
 	}
+
+	// 如果重试成功（没有错误），也要显示重试过程
+	if taskErr == nil && len(useChannel) > 1 {
+		retryLogStr := fmt.Sprintf("重试成功：%s", strings.Trim(strings.Join(strings.Fields(fmt.Sprint(useChannel)), "->"), "[]"))
+		common.LogInfo(c, retryLogStr)
+	}
+
 	if taskErr != nil {
 		if taskErr.StatusCode == http.StatusTooManyRequests {
 			taskErr.Message = "当前分组上游负载已饱和，请稍后再试"
 		}
-		
+
 		// 只有在最终失败时才记录错误日志（重试成功的不算错误）
 		if constant2.ErrorLogEnabled {
 			userId := c.GetInt("id")
@@ -537,7 +581,7 @@ func RelayTask(c *gin.Context) {
 
 			model.RecordErrorLog(c, userId, channelId, modelName, tokenName, taskErr.Message, tokenId, 0, false, userGroup, other)
 		}
-		
+
 		c.JSON(taskErr.StatusCode, taskErr)
 	}
 }

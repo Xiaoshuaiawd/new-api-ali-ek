@@ -3,8 +3,6 @@ package zhipu
 import (
 	"bufio"
 	"encoding/json"
-	"github.com/gin-gonic/gin"
-	"github.com/golang-jwt/jwt"
 	"io"
 	"net/http"
 	"one-api/common"
@@ -15,6 +13,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt"
 )
 
 // https://open.bigmodel.cn/doc/api#chatglm_std
@@ -244,6 +245,12 @@ func zhipuHandler(c *gin.Context, resp *http.Response) (*dto.OpenAIErrorWithStat
 		}, nil
 	}
 	fullTextResponse := responseZhipu2OpenAI(&zhipuResponse)
+
+	// 检测空回复
+	if service.IsEmptyResponse(fullTextResponse) {
+		return service.CreateEmptyResponseError(), nil
+	}
+
 	jsonResponse, err := json.Marshal(fullTextResponse)
 	if err != nil {
 		return service.OpenAIErrorWrapper(err, "marshal_response_body_failed", http.StatusInternalServerError), nil

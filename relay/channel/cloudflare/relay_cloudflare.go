@@ -3,7 +3,6 @@ package cloudflare
 import (
 	"bufio"
 	"encoding/json"
-	"github.com/gin-gonic/gin"
 	"io"
 	"net/http"
 	"one-api/common"
@@ -13,6 +12,8 @@ import (
 	"one-api/service"
 	"strings"
 	"time"
+
+	"github.com/gin-gonic/gin"
 )
 
 func convertCf2CompletionsRequest(textRequest dto.GeneralOpenAIRequest) *CfRequest {
@@ -79,6 +80,12 @@ func cfStreamHandler(c *gin.Context, resp *http.Response, info *relaycommon.Rela
 			common.LogError(c, "error_rendering_final_usage_response: "+err.Error())
 		}
 	}
+
+	// 检测流式响应是否为空
+	if service.IsEmptyStreamResponse(responseText) {
+		return service.CreateEmptyResponseError(), nil
+	}
+
 	helper.Done(c)
 
 	err := resp.Body.Close()
@@ -104,6 +111,12 @@ func cfHandler(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo)
 		return service.OpenAIErrorWrapper(err, "unmarshal_response_body_failed", http.StatusInternalServerError), nil
 	}
 	response.Model = info.UpstreamModelName
+
+	// 检测空回复
+	if service.IsEmptyTextResponse(&response) {
+		return service.CreateEmptyResponseError(), nil
+	}
+
 	var responseText string
 	for _, choice := range response.Choices {
 		responseText += choice.Message.StringContent()

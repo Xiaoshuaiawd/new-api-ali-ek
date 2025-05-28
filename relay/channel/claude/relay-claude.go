@@ -601,6 +601,11 @@ func ClaudeStreamHandler(c *gin.Context, resp *http.Response, info *relaycommon.
 		return err, nil
 	}
 
+	// 检测流式响应是否为空
+	if service.IsEmptyStreamResponse(claudeInfo.ResponseText.String()) {
+		return service.CreateEmptyResponseError(), nil
+	}
+
 	HandleStreamFinalResponse(c, info, claudeInfo, requestMode)
 	return nil, claudeInfo.Usage
 }
@@ -641,6 +646,12 @@ func HandleClaudeResponseData(c *gin.Context, info *relaycommon.RelayInfo, claud
 	case relaycommon.RelayFormatOpenAI:
 		openaiResponse := ResponseClaude2OpenAI(requestMode, &claudeResponse)
 		openaiResponse.Usage = *claudeInfo.Usage
+
+		// 检测空回复
+		if service.IsEmptyResponse(openaiResponse) {
+			return service.CreateEmptyResponseError()
+		}
+
 		responseData, err = json.Marshal(openaiResponse)
 		if err != nil {
 			return service.OpenAIErrorWrapper(err, "marshal_response_body_failed", http.StatusInternalServerError)

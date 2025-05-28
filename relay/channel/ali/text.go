@@ -3,7 +3,6 @@ package ali
 import (
 	"bufio"
 	"encoding/json"
-	"github.com/gin-gonic/gin"
 	"io"
 	"net/http"
 	"one-api/common"
@@ -11,6 +10,8 @@ import (
 	"one-api/relay/helper"
 	"one-api/service"
 	"strings"
+
+	"github.com/gin-gonic/gin"
 )
 
 // https://help.aliyun.com/document_detail/613695.html?spm=a2c4g.2399480.0.0.1adb778fAdzP9w#341800c0f8w0r
@@ -218,6 +219,12 @@ func aliHandler(c *gin.Context, resp *http.Response) (*dto.OpenAIErrorWithStatus
 		}, nil
 	}
 	fullTextResponse := responseAli2OpenAI(&aliResponse)
+
+	// 检测空回复
+	if service.IsEmptyResponse(fullTextResponse) {
+		return service.CreateEmptyResponseError(), nil
+	}
+
 	jsonResponse, err := json.Marshal(fullTextResponse)
 	if err != nil {
 		return service.OpenAIErrorWrapper(err, "marshal_response_body_failed", http.StatusInternalServerError), nil

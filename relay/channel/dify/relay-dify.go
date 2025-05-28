@@ -242,6 +242,11 @@ func difyStreamHandler(c *gin.Context, resp *http.Response, info *relaycommon.Re
 		}
 		return true
 	})
+	// 检测流式响应是否为空
+	if service.IsEmptyStreamResponse(responseText) {
+		return service.CreateEmptyResponseError(), nil
+	}
+
 	helper.Done(c)
 	err := resp.Body.Close()
 	if err != nil {
@@ -288,6 +293,12 @@ func difyHandler(c *gin.Context, resp *http.Response, info *relaycommon.RelayInf
 		FinishReason: "stop",
 	}
 	fullTextResponse.Choices = append(fullTextResponse.Choices, choice)
+
+	// 检测空回复
+	if service.IsEmptyResponse(&fullTextResponse) {
+		return service.CreateEmptyResponseError(), nil
+	}
+
 	jsonResponse, err := json.Marshal(fullTextResponse)
 	if err != nil {
 		return service.OpenAIErrorWrapper(err, "marshal_response_body_failed", http.StatusInternalServerError), nil
