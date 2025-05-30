@@ -74,6 +74,7 @@ var DebugEnabled bool
 var MemoryCacheEnabled bool
 
 var LogConsumeEnabled = true
+var ConversationHistoryEnabled = false
 
 var SMTPServer = ""
 var SMTPPort = 587

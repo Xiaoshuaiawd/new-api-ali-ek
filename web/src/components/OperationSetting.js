@@ -62,6 +62,7 @@ const OperationSetting = () => {
     DemoSiteEnabled: false,
     SelfUseModeEnabled: false,
     AutomaticDisableKeywords: '',
+    ConversationHistoryEnabled: false,
   });
 
   let [loading, setLoading] = useState(false);
