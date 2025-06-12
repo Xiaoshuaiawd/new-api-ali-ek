@@ -33,6 +33,7 @@ const OperationSetting = () => {
     UserUsableGroups: '',
     TopUpLink: '',
     'general_setting.docs_link': '',
+    'general_setting.empty_response_retry_enabled': false,
     // ChatLink2: '', // 添加的新状态变量
     QuotaPerUnit: 0,
     AutomaticDisableChannelEnabled: false,
@@ -61,6 +62,7 @@ const OperationSetting = () => {
     DemoSiteEnabled: false,
     SelfUseModeEnabled: false,
     AutomaticDisableKeywords: '',
+    ConversationHistoryEnabled: false,
   });
 
   let [loading, setLoading] = useState(false);

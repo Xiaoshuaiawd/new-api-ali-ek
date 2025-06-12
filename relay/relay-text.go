@@ -97,14 +97,24 @@ func TextHelper(c *gin.Context) (openaiErr *dto.OpenAIErrorWithStatusCode) {
 
 	if err != nil {
 		common.LogError(c, fmt.Sprintf("getAndValidateTextRequest failed: %s", err.Error()))
-		return service.OpenAIErrorWrapperLocal(err, "invalid_text_request", http.StatusBadRequest)
+		openaiErr := service.OpenAIErrorWrapperLocal(err, "invalid_text_request", http.StatusBadRequest)
+		// 保存错误对话历史
+		if textRequest != nil && relayInfo.RelayMode == relayconstant.RelayModeChatCompletions {
+			saveErrorConversationHistory(c, textRequest, relayInfo, err.Error(), "invalid_text_request")
+		}
+		return openaiErr
 	}
 
 	if setting.ShouldCheckPromptSensitive() {
 		words, err := checkRequestSensitive(textRequest, relayInfo)
 		if err != nil {
 			common.LogWarn(c, fmt.Sprintf("user sensitive words detected: %s", strings.Join(words, ", ")))
-			return service.OpenAIErrorWrapperLocal(err, "sensitive_words_detected", http.StatusBadRequest)
+			openaiErr := service.OpenAIErrorWrapperLocal(err, "sensitive_words_detected", http.StatusBadRequest)
+			// 保存错误对话历史
+			if relayInfo.RelayMode == relayconstant.RelayModeChatCompletions {
+				saveErrorConversationHistory(c, textRequest, relayInfo, fmt.Sprintf("sensitive words detected: %s", strings.Join(words, ", ")), "sensitive_words_detected")
+			}
+			return openaiErr
 		}
 	}
 
@@ -227,6 +237,11 @@ func TextHelper(c *gin.Context) (openaiErr *dto.OpenAIErrorWithStatusCode) {
 			openaiErr = service.RelayErrorHandler(httpResp, false)
 			// reset status code 重置状态码
 			service.ResetStatusCode(openaiErr, statusCodeMappingStr)
+			// 保存错误对话历史
+			if relayInfo.RelayMode == relayconstant.RelayModeChatCompletions {
+				errorMessage := fmt.Sprintf("HTTP %d: %s", httpResp.StatusCode, openaiErr.Error.Message)
+				saveErrorConversationHistory(c, textRequest, relayInfo, errorMessage, fmt.Sprintf("http_%d", httpResp.StatusCode))
+			}
 			return openaiErr
 		}
 	}
@@ -235,6 +250,11 @@ func TextHelper(c *gin.Context) (openaiErr *dto.OpenAIErrorWithStatusCode) {
 	if openaiErr != nil {
 		// reset status code 重置状态码
 		service.ResetStatusCode(openaiErr, statusCodeMappingStr)
+		// 保存错误对话历史
+		if relayInfo.RelayMode == relayconstant.RelayModeChatCompletions {
+			errorMessage := fmt.Sprintf("DoResponse error: %s", openaiErr.Error.Message)
+			saveErrorConversationHistory(c, textRequest, relayInfo, errorMessage, openaiErr.Error.Type)
+		}
 		return openaiErr
 	}
 
@@ -555,6 +575,11 @@ func postConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo,
 
 // saveConversationHistoryWithResponse 保存包含AI回复的对话历史
 func saveConversationHistoryWithResponse(c *gin.Context, textRequest *dto.GeneralOpenAIRequest, relayInfo *relaycommon.RelayInfo) {
+	// 检查是否启用对话历史存储
+	if !common.ConversationHistoryEnabled {
+		return
+	}
+
 	// 生成对话ID，优先从请求头获取，如果没有则使用用户ID+时间戳生成
 	conversationId := c.GetHeader("X-Conversation-ID")
 	if conversationId == "" {
@@ -606,6 +631,44 @@ func saveConversationHistoryWithResponse(c *gin.Context, textRequest *dto.Genera
 		err := model.CreateConversationHistory(c, conversationId, relayInfo.OriginModelName, string(jsonData), relayInfo.UserId)
 		if err != nil {
 			common.LogError(c, "failed to save conversation history: "+err.Error())
+		}
+	})
+}
+
+// saveErrorConversationHistory 保存错误对话历史
+func saveErrorConversationHistory(c *gin.Context, textRequest *dto.GeneralOpenAIRequest, relayInfo *relaycommon.RelayInfo, errorMessage string, errorCode string) {
+	// 检查是否启用对话历史存储
+	if !common.ConversationHistoryEnabled {
+		return
+	}
+
+	// 生成对话ID，优先从请求头获取，如果没有则使用用户ID+时间戳生成
+	conversationId := c.GetHeader("X-Conversation-ID")
+	if conversationId == "" {
+		conversationId = c.GetString("conversation_id")
+	}
+	if conversationId == "" {
+		conversationId = fmt.Sprintf("conv_error_%d_%d", relayInfo.UserId, time.Now().Unix())
+	}
+
+	// 构建要保存的JSON数据，只包含原始对话内容，不包含错误信息
+	conversationData := map[string]interface{}{
+		"messages": textRequest.Messages,
+		"model":    relayInfo.OriginModelName,
+	}
+
+	// 将数据转换为JSON字符串
+	jsonData, err := json.Marshal(conversationData)
+	if err != nil {
+		common.LogError(c, "failed to marshal error conversation data: "+err.Error())
+		return
+	}
+
+	// 异步保存错误对话历史，避免影响主流程性能
+	gopool.Go(func() {
+		err := model.CreateErrorConversationHistory(c, conversationId, relayInfo.OriginModelName, string(jsonData), errorMessage, errorCode, relayInfo.UserId)
+		if err != nil {
+			common.LogError(c, "failed to save error conversation history: "+err.Error())
 		}
 	})
 }

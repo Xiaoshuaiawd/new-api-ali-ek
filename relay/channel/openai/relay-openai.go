@@ -196,8 +196,13 @@ func OaiStreamHandler(c *gin.Context, resp *http.Response, info *relaycommon.Rel
 		}
 	}
 
-	// 保存流式响应的AI回复内容到上下文中，用于对话历史记录
+	// 检测流式响应是否为空
 	responseText := responseTextBuilder.String()
+	if service.IsEmptyStreamResponse(responseText) {
+		return service.CreateEmptyResponseError(), nil
+	}
+
+	// 保存流式响应的AI回复内容到上下文中，用于对话历史记录
 	if responseText != "" {
 		// 从流式响应中提取思考内容
 		var reasoningContent strings.Builder
@@ -245,6 +250,11 @@ func OpenaiHandler(c *gin.Context, resp *http.Response, info *relaycommon.RelayI
 			Error:      *simpleResponse.Error,
 			StatusCode: resp.StatusCode,
 		}, nil
+	}
+
+	// 检测空回复
+	if service.IsEmptyResponse(&simpleResponse) {
+		return service.CreateEmptyResponseError(), nil
 	}
 
 	// 保存AI回复内容到上下文中，用于对话历史记录

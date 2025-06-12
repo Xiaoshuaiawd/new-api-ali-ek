@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/gin-gonic/gin"
 	"io"
 	"net/http"
 	"one-api/common"
@@ -19,6 +18,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/gin-gonic/gin"
 )
 
 // https://cloud.tencent.com/document/product/1729/97732
@@ -124,6 +125,11 @@ func tencentStreamHandler(c *gin.Context, resp *http.Response) (*dto.OpenAIError
 
 	helper.Done(c)
 
+	// 检测流式响应是否为空
+	if service.IsEmptyStreamResponse(responseText) {
+		return service.CreateEmptyResponseError(), ""
+	}
+
 	err := resp.Body.Close()
 	if err != nil {
 		return service.OpenAIErrorWrapper(err, "close_response_body_failed", http.StatusInternalServerError), ""
@@ -156,6 +162,12 @@ func tencentHandler(c *gin.Context, resp *http.Response) (*dto.OpenAIErrorWithSt
 		}, nil
 	}
 	fullTextResponse := responseTencent2OpenAI(&tencentSb.Response)
+
+	// 检测空回复
+	if service.IsEmptyResponse(fullTextResponse) {
+		return service.CreateEmptyResponseError(), nil
+	}
+
 	jsonResponse, err := json.Marshal(fullTextResponse)
 	if err != nil {
 		return service.OpenAIErrorWrapper(err, "marshal_response_body_failed", http.StatusInternalServerError), nil

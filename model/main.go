@@ -250,6 +250,10 @@ func migrateDB() error {
 	if err != nil {
 		return err
 	}
+	err = DB.AutoMigrate(&ErrorConversationHistory{})
+	if err != nil {
+		return err
+	}
 	common.SysLog("database migrated")
 	//err = createRootAccountIfNeed()
 	return err

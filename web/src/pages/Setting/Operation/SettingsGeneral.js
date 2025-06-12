@@ -35,6 +35,7 @@ export default function GeneralSettings(props) {
     DemoSiteEnabled: false,
     SelfUseModeEnabled: false,
     'general_setting.retry_disable_status_codes': '',
+    'general_setting.empty_response_retry_enabled': false,
   });
   const refForm = useRef();
   const [inputsRow, setInputsRow] = useState(inputs);
@@ -89,7 +90,17 @@ export default function GeneralSettings(props) {
     // 然后用后端返回的值覆盖
     for (let key in props.options) {
       if (Object.keys(inputs).includes(key)) {
-        currentInputs[key] = props.options[key];
+        let value = props.options[key];
+        // 对于布尔值字段，需要转换字符串为布尔值
+        if (key === 'general_setting.empty_response_retry_enabled' || 
+            key === 'DisplayInCurrencyEnabled' || 
+            key === 'DisplayTokenStatEnabled' || 
+            key === 'DefaultCollapseSidebar' || 
+            key === 'DemoSiteEnabled' || 
+            key === 'SelfUseModeEnabled') {
+          value = value === 'true' || value === true;
+        }
+        currentInputs[key] = value;
       }
     }
     setInputs(currentInputs);
@@ -207,7 +218,7 @@ export default function GeneralSettings(props) {
                 />
               </Col>
             </Row>
-            <Row>
+            <Row gutter={16}>
               <Col xs={24} sm={12} md={8} lg={8} xl={8}>
                 <Form.Switch
                   field={'DemoSiteEnabled'}
@@ -229,7 +240,18 @@ export default function GeneralSettings(props) {
                   onChange={handleFieldChange('SelfUseModeEnabled')}
                 />
               </Col>
-
+              <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+                <Tooltip content={t('开启后，当接口返回空内容时会自动切换到其他渠道重试，避免将空回复返回给客户端')}>
+                  <Form.Switch
+                    field={'general_setting.empty_response_retry_enabled'}
+                    label={t('空回复重试')}
+                    size='default'
+                    checkedText='｜'
+                    uncheckedText='〇'
+                    onChange={handleFieldChange('general_setting.empty_response_retry_enabled')}
+                  />
+                </Tooltip>
+              </Col>
             </Row>
             <Row>
               <Button size='default' onClick={onSubmit}>
