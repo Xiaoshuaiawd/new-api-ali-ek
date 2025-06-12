@@ -887,9 +887,19 @@ func CheckAndDisableOverQuotaChannels() (int, error) {
 
 // ChannelQuotaCheckTask 渠道限额检查定时任务
 func ChannelQuotaCheckTask() {
+	var lastInterval int // 记录上次的检查间隔
+	lastInterval = common.ChannelQuotaCheckInterval
+
 	for {
+		// 检查间隔是否发生变化
+		currentInterval := common.ChannelQuotaCheckInterval
+		if currentInterval != lastInterval {
+			common.SysLog(fmt.Sprintf("渠道限额检查间隔已更新：从 %d 秒变更为 %d 秒", lastInterval, currentInterval))
+			lastInterval = currentInterval
+		}
+
 		// 等待指定的检查间隔
-		time.Sleep(time.Duration(common.ChannelQuotaCheckInterval) * time.Second)
+		time.Sleep(time.Duration(currentInterval) * time.Second)
 
 		common.SysLog("开始检查渠道限额和自动重置...")
 

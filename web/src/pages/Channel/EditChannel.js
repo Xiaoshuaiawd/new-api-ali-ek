@@ -950,10 +950,10 @@ const EditChannel = (props) => {
               </div>
             </Card>
 
-            {/* Advanced Settings Card */}
+            {/* Quota and Limit Configuration Card */}
             <Card className="!rounded-2xl shadow-sm border-0 mb-6">
               <div className="flex items-center mb-4 p-6 rounded-xl" style={{
-                background: 'linear-gradient(135deg, #92400e 0%, #d97706 50%, #f59e0b 100%)',
+                background: 'linear-gradient(135deg, #b91c1c 0%, #dc2626 50%, #ef4444 100%)',
                 position: 'relative'
               }}>
                 <div className="absolute inset-0 overflow-hidden">
@@ -964,253 +964,185 @@ const EditChannel = (props) => {
                   <IconSetting size="large" style={{ color: '#ffffff' }} />
                 </div>
                 <div className="relative">
-                  <Text style={{ color: '#ffffff' }} className="text-lg font-medium">{t('高级设置')}</Text>
-                  <div style={{ color: '#ffffff' }} className="text-sm opacity-80">{t('渠道的高级配置选项')}</div>
+                  <Text style={{ color: '#ffffff' }} className="text-lg font-medium">{t('额度与限制配置')}</Text>
+                  <div style={{ color: '#ffffff' }} className="text-sm opacity-80">{t('渠道的额度限制、次数限制和状态码配置')}</div>
                 </div>
               </div>
 
-              <div className="space-y-4">
+              <div className="space-y-6">
+                {/* 额度限制 */}
                 <div>
-                  <Text strong className="block mb-2">{t('分组')}</Text>
-                  <Select
-                    placeholder={t('请选择可以使用该渠道的分组')}
-                    name='groups'
-                    required
-                    multiple
-                    selection
-                    allowAdditions
-                    additionLabel={t('请在系统设置页面编辑分组倍率以添加新的分组：')}
-                    onChange={(value) => handleInputChange('groups', value)}
-                    value={inputs.groups}
-                    autoComplete='new-password'
-                    optionList={groupOptions}
-                    size="large"
-                    className="!rounded-lg"
-                  />
-                </div>
-
-                {inputs.type === 18 && (
-                  <div>
-                    <Text strong className="block mb-2">{t('模型版本')}</Text>
-                    <Input
-                      name='other'
-                      placeholder={'请输入星火大模型版本，注意是接口地址中的版本号，例如：v2.1'}
-                      onChange={(value) => handleInputChange('other', value)}
-                      value={inputs.other}
-                      autoComplete='new-password'
-                      size="large"
-                      className="!rounded-lg"
-                    />
-                  </div>
-                )}
-
-                {inputs.type === 41 && (
-                  <div>
-                    <Text strong className="block mb-2">{t('部署地区')}</Text>
-                    <TextArea
-                      name='other'
-                      placeholder={t(
-                        '请输入部署地区，例如：us-central1\n支持使用模型映射格式\n' +
-                        '{\n' +
-                        '    "default": "us-central1",\n' +
-                        '    "claude-3-5-sonnet-20240620": "europe-west1"\n' +
-                        '}'
-                      )}
-                      autosize={{ minRows: 2 }}
-                      onChange={(value) => handleInputChange('other', value)}
-                      value={inputs.other}
-                      autoComplete='new-password'
-                      className="!rounded-lg font-mono"
-                    />
-                    <Text
-                      className="!text-semi-color-primary cursor-pointer mt-1 block"
-                      onClick={() => handleInputChange('other', JSON.stringify(REGION_EXAMPLE, null, 2))}
-                    >
-                      {t('填入模板')}
-                    </Text>
-                  </div>
-                )}
-
-                {inputs.type === 21 && (
-                  <div>
-                    <Text strong className="block mb-2">{t('知识库 ID')}</Text>
-                    <Input
-                      name='other'
-                      placeholder={'请输入知识库 ID，例如：123456'}
-                      onChange={(value) => handleInputChange('other', value)}
-                      value={inputs.other}
-                      autoComplete='new-password'
-                      size="large"
-                      className="!rounded-lg"
-                    />
-                  </div>
-                )}
-
-                {inputs.type === 39 && (
-                  <div>
-                    <Text strong className="block mb-2">Account ID</Text>
-                    <Input
-                      name='other'
-                      placeholder={'请输入Account ID，例如：d6b5da8hk1awo8nap34ube6gh'}
-                      onChange={(value) => handleInputChange('other', value)}
-                      value={inputs.other}
-                      autoComplete='new-password'
-                      size="large"
-                      className="!rounded-lg"
-                    />
-                  </div>
-                )}
-
-                {inputs.type === 49 && (
-                  <div>
-                    <Text strong className="block mb-2">{t('智能体ID')}</Text>
-                    <Input
-                      name='other'
-                      placeholder={'请输入智能体ID，例如：7342866812345'}
-                      onChange={(value) => handleInputChange('other', value)}
-                      value={inputs.other}
-                      autoComplete='new-password'
-                      size="large"
-                      className="!rounded-lg"
-                    />
-                  </div>
-                )}
-
-                <div>
-                  <Text strong className="block mb-2">{t('渠道标签')}</Text>
-                  <Input
-                    name='tag'
-                    placeholder={t('渠道标签')}
-                    onChange={(value) => handleInputChange('tag', value)}
-                    value={inputs.tag}
-                    autoComplete='new-password'
-                    size="large"
-                    className="!rounded-lg"
-                  />
-                </div>
-
-                <div>
-                  <Text strong className="block mb-2">{t('渠道优先级')}</Text>
-                  <Input
-                    name='priority'
-                    placeholder={t('渠道优先级')}
-                    onChange={(value) => {
-                      const number = parseInt(value);
-                      if (isNaN(number)) {
-                        handleInputChange('priority', value);
-                      } else {
-                        handleInputChange('priority', number);
-                      }
-                    }}
-                    value={inputs.priority}
-                    autoComplete='new-password'
-                    size="large"
-                    className="!rounded-lg"
-                  />
-                </div>
-
-                <div>
-                  <Text strong className="block mb-2">{t('渠道权重')}</Text>
-                  <Input
-                    name='weight'
-                    placeholder={t('渠道权重')}
-                    onChange={(value) => {
-                      const number = parseInt(value);
-                      if (isNaN(number)) {
-                        handleInputChange('weight', value);
-                      } else {
-                        handleInputChange('weight', number);
-                      }
-                    }}
-                    value={inputs.weight}
-                    autoComplete='new-password'
-                    size="large"
-                    className="!rounded-lg"
-                  />
-                </div>
-
-                <div>
-                  <Text strong className="block mb-2">{t('渠道额外设置')}</Text>
-                  <TextArea
-                    placeholder={
-                      t('此项可选，用于配置渠道特定设置，为一个 JSON 字符串，例如：') +
-                      '\n{\n  "force_format": true\n}'
-                    }
-                    name='setting'
-                    onChange={(value) => handleInputChange('setting', value)}
-                    autosize
-                    value={inputs.setting}
-                    autoComplete='new-password'
-                    className="!rounded-lg font-mono"
-                  />
-                  <div className="flex gap-2 mt-1">
-                    <Text
-                      className="!text-semi-color-primary cursor-pointer"
-                      onClick={() => {
-                        handleInputChange(
-                          'setting',
-                          JSON.stringify({ force_format: true }, null, 2),
-                        );
+                  <div className="flex items-center mb-3">
+                    <Checkbox
+                      name='quota_limit_enabled'
+                      checked={Boolean(inputs.quota_limit_enabled)}
+                      onChange={() => {
+                        const newValue = !inputs.quota_limit_enabled;
+                        handleInputChange('quota_limit_enabled', newValue);
+                        if (newValue) {
+                          handleInputChange('count_limit_enabled', false);
+                        }
                       }}
-                    >
-                      {t('填入模板')}
-                    </Text>
-                    <Text
-                      className="!text-semi-color-primary cursor-pointer"
-                      onClick={() => {
-                        window.open(
-                          'https://github.com/QuantumNous/new-api/blob/main/docs/channel/other_setting.md',
-                        );
-                      }}
-                    >
-                      {t('设置说明')}
-                    </Text>
-                  </div>
-                </div>
-
-                <div>
-                  <Text strong className="block mb-2">{t('参数覆盖')}</Text>
-                  <TextArea
-                    placeholder={
-                      t('此项可选，用于覆盖请求参数。不支持覆盖 stream 参数。为一个 JSON 字符串，例如：') +
-                      '\n{\n  "temperature": 0\n}'
-                    }
-                    name='param_override'
-                    onChange={(value) => handleInputChange('param_override', value)}
-                    autosize
-                    value={inputs.param_override}
-                    autoComplete='new-password'
-                    className="!rounded-lg font-mono"
-                  />
-                </div>
-
-                {inputs.type === 1 && (
-                  <div>
-                    <Text strong className="block mb-2">{t('组织')}</Text>
-                    <Input
-                      name='openai_organization'
-                      placeholder={t('请输入组织org-xxx')}
-                      onChange={(value) => handleInputChange('openai_organization', value)}
-                      value={inputs.openai_organization}
-                      size="large"
-                      className="!rounded-lg"
                     />
-                    <Text type="tertiary" className="mt-1 text-xs">
-                      {t('组织，可选，不填则为默认组织')}
+                    <Text strong className="ml-2">
+                      {t('启用渠道限额（达到限额后自动禁用渠道）')}
                     </Text>
                   </div>
-                )}
-
-                <div className="flex items-center">
-                  <Checkbox
-                    checked={autoBan}
-                    onChange={() => setAutoBan(!autoBan)}
-                  />
-                  <Text strong className="ml-2">
-                    {t('是否自动禁用（仅当自动禁用开启时有效），关闭后不会自动禁用该渠道')}
-                  </Text>
+                  {inputs.quota_limit_enabled && (
+                    <div className="ml-6 space-y-2">
+                      <div>
+                        <Text strong className="block mb-2">{t('限额设置（单位：刀）')}</Text>
+                        <Input
+                          name='quota_limit'
+                          placeholder={t('请输入限额金额，以500000token为1刀计算')}
+                          onChange={(value) => {
+                            const number = parseFloat(value);
+                            if (isNaN(number)) {
+                              handleInputChange('quota_limit', value);
+                            } else {
+                              handleInputChange('quota_limit', number);
+                            }
+                          }}
+                          value={inputs.quota_limit}
+                          autoComplete='new-password'
+                          size="large"
+                          className="!rounded-lg"
+                        />
+                        <Text type="tertiary" className="mt-1 text-xs">
+                          {t('说明：系统按500000token为1刀计算，当渠道使用额度达到设置的限额时，将自动禁用该渠道')}
+                        </Text>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
+                {/* 次数限制 */}
+                <div>
+                  <div className="flex items-center mb-3">
+                    <Checkbox
+                      name='count_limit_enabled'
+                      checked={Boolean(inputs.count_limit_enabled)}
+                      onChange={() => {
+                        const newValue = !inputs.count_limit_enabled;
+                        handleInputChange('count_limit_enabled', newValue);
+                        if (newValue) {
+                          handleInputChange('quota_limit_enabled', false);
+                        }
+                      }}
+                    />
+                    <Text strong className="ml-2">
+                      {t('启用渠道次数限制（达到限制次数后自动禁用渠道）')}
+                    </Text>
+                  </div>
+                  {inputs.count_limit_enabled && (
+                    <div className="ml-6 space-y-4">
+                      <div>
+                        <Text strong className="block mb-2">{t('次数限制设置')}</Text>
+                        <Input
+                          name='count_limit'
+                          placeholder={t('请输入限制次数，例如：1000')}
+                          onChange={(value) => {
+                            const number = parseInt(value);
+                            if (isNaN(number)) {
+                              handleInputChange('count_limit', value);
+                            } else {
+                              handleInputChange('count_limit', number);
+                            }
+                          }}
+                          value={inputs.count_limit}
+                          autoComplete='new-password'
+                          size="large"
+                          className="!rounded-lg"
+                        />
+                        <Text type="tertiary" className="mt-1 text-xs">
+                          {t('说明：当渠道调用次数达到设置的限制时，将自动禁用该渠道')}
+                        </Text>
+                      </div>
+                      
+                      <div>
+                        <div className="flex items-center mb-3">
+                          <Checkbox
+                            name='auto_reset_enabled'
+                            checked={Boolean(inputs.auto_reset_enabled)}
+                            onChange={() => {
+                              handleInputChange('auto_reset_enabled', !inputs.auto_reset_enabled);
+                            }}
+                          />
+                          <Text strong className="ml-2">
+                            {t('启用自动重置（达到限制后自动重新启用渠道）')}
+                          </Text>
+                        </div>
+                        
+                        {inputs.auto_reset_enabled && (
+                          <div className="ml-6">
+                            <Text strong className="block mb-2">{t('自动重置间隔（秒）')}</Text>
+                            <Input
+                              name='auto_reset_interval'
+                              placeholder={t('请输入重置间隔（秒），例如：3600（1小时）')}
+                              onChange={(value) => {
+                                const number = parseInt(value);
+                                if (isNaN(number)) {
+                                  handleInputChange('auto_reset_interval', value);
+                                } else {
+                                  handleInputChange('auto_reset_interval', number);
+                                }
+                              }}
+                              value={inputs.auto_reset_interval}
+                              autoComplete='new-password'
+                              size="large"
+                              className="!rounded-lg"
+                            />
+                            <Text type="tertiary" className="mt-1 text-xs">
+                              {t('说明：当渠道因次数限制被禁用后，等待指定时间（秒）后自动重新启用并重置使用次数。例如：3600表示1小时后重置')}
+                            </Text>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* RPM限制 */}
+                <div>
+                  <div className="flex items-center mb-3">
+                    <Checkbox
+                      name='rpm_limit_enabled'
+                      checked={Boolean(inputs.rpm_limit_enabled)}
+                      onChange={() => {
+                        handleInputChange('rpm_limit_enabled', !inputs.rpm_limit_enabled);
+                      }}
+                    />
+                    <Text strong className="ml-2">
+                      {t('启用RPM限制（限制每分钟请求次数）')}
+                    </Text>
+                  </div>
+                  {inputs.rpm_limit_enabled && (
+                    <div className="ml-6">
+                      <Text strong className="block mb-2">{t('RPM限制设置')}</Text>
+                      <Input
+                        name='rpm_limit'
+                        placeholder={t('请输入每分钟最大请求次数，例如：20')}
+                        onChange={(value) => {
+                          const number = parseInt(value);
+                          if (isNaN(number)) {
+                            handleInputChange('rpm_limit', value);
+                          } else {
+                            handleInputChange('rpm_limit', number);
+                          }
+                        }}
+                        value={inputs.rpm_limit}
+                        autoComplete='new-password'
+                        size="large"
+                        className="!rounded-lg"
+                      />
+                      <Text type="tertiary" className="mt-1 text-xs">
+                        {t('说明：当渠道每分钟请求次数超过设置的限制时，将自动切换到其他渠道。例如：20表示每分钟最多20次请求')}
+                      </Text>
+                    </div>
+                  )}
+                </div>
+
+                {/* 状态码复写 */}
                 <div>
                   <Text strong className="block mb-2">
                     {t('状态码复写（仅影响本地判断，不修改返回到上游的状态码）')}
@@ -1243,205 +1175,6 @@ const EditChannel = (props) => {
               </div>
             </Card>
           </div>
-<<<<<<< HEAD
-          <div style={{ marginTop: 10, display: 'flex' }}>
-            <Space>
-              <Checkbox
-                name='quota_limit_enabled'
-                checked={Boolean(inputs.quota_limit_enabled)}
-                onChange={() => {
-                  const newValue = !inputs.quota_limit_enabled;
-                  handleInputChange('quota_limit_enabled', newValue);
-                  // 如果启用额度限制，则禁用次数限制
-                  if (newValue) {
-                    handleInputChange('count_limit_enabled', false);
-                  }
-                }}
-              />
-              <Typography.Text strong>
-                {t('启用渠道限额（达到限额后自动禁用渠道）')}
-              </Typography.Text>
-            </Space>
-          </div>
-          {inputs.quota_limit_enabled && (
-            <div style={{ marginTop: 10 }}>
-              <Typography.Text strong>{t('限额设置（单位：刀）')}：</Typography.Text>
-              <Input
-                label={t('限额金额')}
-                name='quota_limit'
-                placeholder={t('请输入限额金额，以500000token为1刀计算')}
-                onChange={(value) => {
-                  const number = parseFloat(value);
-                  if (isNaN(number)) {
-                    handleInputChange('quota_limit', value);
-                  } else {
-                    handleInputChange('quota_limit', number);
-                  }
-                }}
-                value={inputs.quota_limit}
-                autoComplete='new-password'
-              />
-              <Typography.Text type="secondary" style={{ fontSize: '12px' }}>
-                {t('说明：系统按500000token为1刀计算，当渠道使用额度达到设置的限额时，将自动禁用该渠道')}
-              </Typography.Text>
-            </div>
-          )}
-          <div style={{ marginTop: 10, display: 'flex' }}>
-            <Space>
-              <Checkbox
-                name='count_limit_enabled'
-                checked={Boolean(inputs.count_limit_enabled)}
-                onChange={() => {
-                  const newValue = !inputs.count_limit_enabled;
-                  handleInputChange('count_limit_enabled', newValue);
-                  // 如果启用次数限制，则禁用额度限制
-                  if (newValue) {
-                    handleInputChange('quota_limit_enabled', false);
-                  }
-                }}
-              />
-              <Typography.Text strong>
-                {t('启用渠道次数限制（达到限制次数后自动禁用渠道）')}
-              </Typography.Text>
-            </Space>
-          </div>
-          {inputs.count_limit_enabled && (
-            <div style={{ marginTop: 10 }}>
-              <Typography.Text strong>{t('次数限制设置')}：</Typography.Text>
-              <Input
-                label={t('限制次数')}
-                name='count_limit'
-                placeholder={t('请输入限制次数，例如：1000')}
-                onChange={(value) => {
-                  const number = parseInt(value);
-                  if (isNaN(number)) {
-                    handleInputChange('count_limit', value);
-                  } else {
-                    handleInputChange('count_limit', number);
-                  }
-                }}
-                value={inputs.count_limit}
-                autoComplete='new-password'
-              />
-              <Typography.Text type="secondary" style={{ fontSize: '12px' }}>
-                {t('说明：当渠道调用次数达到设置的限制时，将自动禁用该渠道')}
-              </Typography.Text>
-              
-              <div style={{ marginTop: 10, display: 'flex' }}>
-                <Space>
-                  <Checkbox
-                    name='auto_reset_enabled'
-                    checked={Boolean(inputs.auto_reset_enabled)}
-                    onChange={() => {
-                      handleInputChange('auto_reset_enabled', !inputs.auto_reset_enabled);
-                    }}
-                  />
-                  <Typography.Text strong>
-                    {t('启用自动重置（达到限制后自动重新启用渠道）')}
-                  </Typography.Text>
-                </Space>
-              </div>
-              
-              {inputs.auto_reset_enabled && (
-                <div style={{ marginTop: 10 }}>
-                  <Typography.Text strong>{t('自动重置间隔（秒）')}：</Typography.Text>
-                  <Input
-                    label={t('重置间隔')}
-                    name='auto_reset_interval'
-                    placeholder={t('请输入重置间隔（秒），例如：3600（1小时）')}
-                    onChange={(value) => {
-                      const number = parseInt(value);
-                      if (isNaN(number)) {
-                        handleInputChange('auto_reset_interval', value);
-                      } else {
-                        handleInputChange('auto_reset_interval', number);
-                      }
-                    }}
-                    value={inputs.auto_reset_interval}
-                    autoComplete='new-password'
-                  />
-                  <Typography.Text type="secondary" style={{ fontSize: '12px' }}>
-                    {t('说明：当渠道因次数限制被禁用后，等待指定时间（秒）后自动重新启用并重置使用次数。例如：3600表示1小时后重置')}
-                  </Typography.Text>
-                </div>
-              )}
-            </div>
-          )}
-          <div style={{ marginTop: 10, display: 'flex' }}>
-            <Space>
-              <Checkbox
-                name='rpm_limit_enabled'
-                checked={Boolean(inputs.rpm_limit_enabled)}
-                onChange={() => {
-                  handleInputChange('rpm_limit_enabled', !inputs.rpm_limit_enabled);
-                }}
-              />
-              <Typography.Text strong>
-                {t('启用RPM限制（限制每分钟请求次数）')}
-              </Typography.Text>
-            </Space>
-          </div>
-          {inputs.rpm_limit_enabled && (
-            <div style={{ marginTop: 10 }}>
-              <Typography.Text strong>{t('RPM限制设置')}：</Typography.Text>
-              <Input
-                label={t('每分钟请求次数限制')}
-                name='rpm_limit'
-                placeholder={t('请输入每分钟最大请求次数，例如：20')}
-                onChange={(value) => {
-                  const number = parseInt(value);
-                  if (isNaN(number)) {
-                    handleInputChange('rpm_limit', value);
-                  } else {
-                    handleInputChange('rpm_limit', number);
-                  }
-                }}
-                value={inputs.rpm_limit}
-                autoComplete='new-password'
-              />
-              <Typography.Text type="secondary" style={{ fontSize: '12px' }}>
-                {t('说明：当渠道每分钟请求次数超过设置的限制时，将自动切换到其他渠道。例如：20表示每分钟最多20次请求')}
-              </Typography.Text>
-            </div>
-          )}
-          <div style={{ marginTop: 10 }}>
-            <Typography.Text strong>
-              {t('状态码复写（仅影响本地判断，不修改返回到上游的状态码）')}：
-            </Typography.Text>
-          </div>
-          <TextArea
-            placeholder={
-              t(
-                '此项可选，用于复写返回的状态码，比如将claude渠道的400错误复写为500（用于重试），请勿滥用该功能，例如：',
-              ) +
-              '\n' +
-              JSON.stringify(STATUS_CODE_MAPPING_EXAMPLE, null, 2)
-            }
-            name='status_code_mapping'
-            onChange={(value) => {
-              handleInputChange('status_code_mapping', value);
-            }}
-            autosize
-            value={inputs.status_code_mapping}
-            autoComplete='new-password'
-          />
-          <Typography.Text
-            style={{
-              color: 'rgba(var(--semi-blue-5), 1)',
-              userSelect: 'none',
-              cursor: 'pointer',
-            }}
-            onClick={() => {
-              handleInputChange(
-                'status_code_mapping',
-                JSON.stringify(STATUS_CODE_MAPPING_EXAMPLE, null, 2),
-              );
-            }}
-          >
-            {t('填入模板')}
-          </Typography.Text>
-=======
->>>>>>> 3d6859b865c8ea7b4709cd9572a4d05d1e2f0dde
         </Spin>
         <ImagePreview
           src={modalImageUrl}
