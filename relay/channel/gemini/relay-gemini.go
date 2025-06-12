@@ -18,6 +18,24 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+var geminiSupportedMimeTypes = map[string]bool{
+	"application/pdf": true,
+	"audio/mpeg":      true,
+	"audio/mp3":       true,
+	"audio/wav":       true,
+	"image/png":       true,
+	"image/jpeg":      true,
+	"text/plain":      true,
+	"video/mov":       true,
+	"video/mpeg":      true,
+	"video/mp4":       true,
+	"video/mpg":       true,
+	"video/avi":       true,
+	"video/wmv":       true,
+	"video/mpegps":    true,
+	"video/flv":       true,
+}
+
 // Setting safety to the lowest possible values since Gemini is already powerless enough
 func CovertGemini2OpenAI(textRequest dto.GeneralOpenAIRequest, info *relaycommon.RelayInfo) (*GeminiChatRequest, error) {
 
@@ -39,25 +57,63 @@ func CovertGemini2OpenAI(textRequest dto.GeneralOpenAIRequest, info *relaycommon
 	}
 
 	if model_setting.GetGeminiSettings().ThinkingAdapterEnabled {
-	        if strings.HasSuffix(info.OriginModelName, "-thinking") {
-	            // 如果模型名以 gemini-2.5-pro 开头，不设置 ThinkingBudget
-	            if strings.HasPrefix(info.OriginModelName, "gemini-2.5-pro") {
-	                geminiRequest.GenerationConfig.ThinkingConfig = &GeminiThinkingConfig{
-	                    IncludeThoughts: true,
-	                }
-	            } else {
-	                budgetTokens := model_setting.GetGeminiSettings().ThinkingAdapterBudgetTokensPercentage * float64(geminiRequest.GenerationConfig.MaxOutputTokens)
-	                if budgetTokens == 0 || budgetTokens > 24576 {
-	                    budgetTokens = 24576
-	                }
-	                geminiRequest.GenerationConfig.ThinkingConfig = &GeminiThinkingConfig{
-	                    ThinkingBudget:  common.GetPointer(int(budgetTokens)),
-	                    IncludeThoughts: true,
-	                }
-	            }
+		if strings.HasSuffix(info.OriginModelName, "-thinking") {
+			// 硬编码不支持 ThinkingBudget 的旧模型
+			unsupportedModels := []string{
+				"gemini-2.5-pro-preview-05-06",
+				"gemini-2.5-pro-preview-03-25",
+			}
+
+			isUnsupported := false
+			for _, unsupportedModel := range unsupportedModels {
+				if strings.HasPrefix(info.OriginModelName, unsupportedModel) {
+					isUnsupported = true
+					break
+				}
+			}
+
+			if isUnsupported {
+				geminiRequest.GenerationConfig.ThinkingConfig = &GeminiThinkingConfig{
+					IncludeThoughts: true,
+				}
+			} else {
+				budgetTokens := model_setting.GetGeminiSettings().ThinkingAdapterBudgetTokensPercentage * float64(geminiRequest.GenerationConfig.MaxOutputTokens)
+
+				// 检查是否为新的2.5pro模型（支持ThinkingBudget但有特殊范围）
+				isNew25Pro := strings.HasPrefix(info.OriginModelName, "gemini-2.5-pro") &&
+					!strings.HasPrefix(info.OriginModelName, "gemini-2.5-pro-preview-05-06") &&
+					!strings.HasPrefix(info.OriginModelName, "gemini-2.5-pro-preview-03-25")
+
+				if isNew25Pro {
+					// 新的2.5pro模型：ThinkingBudget范围为128-32768
+					if budgetTokens == 0 || budgetTokens < 128 {
+						budgetTokens = 128
+					} else if budgetTokens > 32768 {
+						budgetTokens = 32768
+					}
+				} else {
+					// 其他模型：ThinkingBudget范围为0-24576
+					if budgetTokens == 0 || budgetTokens > 24576 {
+						budgetTokens = 24576
+					}
+				}
+
+				geminiRequest.GenerationConfig.ThinkingConfig = &GeminiThinkingConfig{
+					ThinkingBudget:  common.GetPointer(int(budgetTokens)),
+					IncludeThoughts: true,
+				}
+			}
 		} else if strings.HasSuffix(info.OriginModelName, "-nothinking") {
-			geminiRequest.GenerationConfig.ThinkingConfig = &GeminiThinkingConfig{
-				ThinkingBudget: common.GetPointer(0),
+			// 检查是否为新的2.5pro模型（不支持-nothinking，因为最低值只能为128）
+			isNew25Pro := strings.HasPrefix(info.OriginModelName, "gemini-2.5-pro") &&
+				!strings.HasPrefix(info.OriginModelName, "gemini-2.5-pro-preview-05-06") &&
+				!strings.HasPrefix(info.OriginModelName, "gemini-2.5-pro-preview-03-25")
+
+			if !isNew25Pro {
+				// 只有非新2.5pro模型才支持-nothinking
+				geminiRequest.GenerationConfig.ThinkingConfig = &GeminiThinkingConfig{
+					ThinkingBudget: common.GetPointer(0),
+				}
 			}
 		}
 	}
@@ -119,12 +175,6 @@ func CovertGemini2OpenAI(textRequest dto.GeneralOpenAIRequest, info *relaycommon
 		// common.SysLog("tools: " + fmt.Sprintf("%+v", geminiRequest.Tools))
 		// json_data, _ := json.Marshal(geminiRequest.Tools)
 		// common.SysLog("tools_json: " + string(json_data))
-	} else if textRequest.Functions != nil {
-		//geminiRequest.Tools = []GeminiChatTool{
-		//	{
-		//		FunctionDeclarations: textRequest.Functions,
-		//	},
-		//}
 	}
 
 	if textRequest.ResponseFormat != nil && (textRequest.ResponseFormat.Type == "json_schema" || textRequest.ResponseFormat.Type == "json_object") {
@@ -155,17 +205,27 @@ func CovertGemini2OpenAI(textRequest dto.GeneralOpenAIRequest, info *relaycommon
 			} else if val, exists := tool_call_ids[message.ToolCallId]; exists {
 				name = val
 			}
-			content := common.StrToMap(message.StringContent())
+			var contentMap map[string]interface{}
+			contentStr := message.StringContent()
+
+			// 1. 尝试解析为 JSON 对象
+			if err := json.Unmarshal([]byte(contentStr), &contentMap); err != nil {
+				// 2. 如果失败，尝试解析为 JSON 数组
+				var contentSlice []interface{}
+				if err := json.Unmarshal([]byte(contentStr), &contentSlice); err == nil {
+					// 如果是数组，包装成对象
+					contentMap = map[string]interface{}{"result": contentSlice}
+				} else {
+					// 3. 如果再次失败，作为纯文本处理
+					contentMap = map[string]interface{}{"content": contentStr}
+				}
+			}
+
 			functionResp := &FunctionResponse{
-				Name: name,
-				Response: GeminiFunctionResponseContent{
-					Name:    name,
-					Content: content,
-				},
+				Name:     name,
+				Response: contentMap,
 			}
-			if content == nil {
-				functionResp.Response.Content = message.StringContent()
-			}
+
 			*parts = append(*parts, GeminiPart{
 				FunctionResponse: functionResp,
 			})
@@ -215,14 +275,20 @@ func CovertGemini2OpenAI(textRequest dto.GeneralOpenAIRequest, info *relaycommon
 				}
 				// 判断是否是url
 				if strings.HasPrefix(part.GetImageMedia().Url, "http") {
-					// 是url，获取图片的类型和base64编码的数据
+					// 是url，获取文件的类型和base64编码的数据
 					fileData, err := service.GetFileBase64FromUrl(part.GetImageMedia().Url)
 					if err != nil {
-						return nil, fmt.Errorf("get file base64 from url failed: %s", err.Error())
+						return nil, fmt.Errorf("get file base64 from url '%s' failed: %w", part.GetImageMedia().Url, err)
 					}
+
+					// 校验 MimeType 是否在 Gemini 支持的白名单中
+					if _, ok := geminiSupportedMimeTypes[strings.ToLower(fileData.MimeType)]; !ok {
+						return nil, fmt.Errorf("MIME type '%s' from URL '%s' is not supported by Gemini. Supported types are: %v", fileData.MimeType, part.GetImageMedia().Url, getSupportedMimeTypesList())
+					}
+
 					parts = append(parts, GeminiPart{
 						InlineData: &GeminiInlineData{
-							MimeType: fileData.MimeType,
+							MimeType: fileData.MimeType, // 使用原始的 MimeType，因为大小写可能对API有意义
 							Data:     fileData.Base64Data,
 						},
 					})
@@ -256,13 +322,13 @@ func CovertGemini2OpenAI(textRequest dto.GeneralOpenAIRequest, info *relaycommon
 				if part.GetInputAudio().Data == "" {
 					return nil, fmt.Errorf("only base64 audio is supported in gemini")
 				}
-				format, base64String, err := service.DecodeBase64FileData(part.GetInputAudio().Data)
+				base64String, err := service.DecodeBase64AudioData(part.GetInputAudio().Data)
 				if err != nil {
 					return nil, fmt.Errorf("decode base64 audio data failed: %s", err.Error())
 				}
 				parts = append(parts, GeminiPart{
 					InlineData: &GeminiInlineData{
-						MimeType: format,
+						MimeType: "audio/" + part.GetInputAudio().Format,
 						Data:     base64String,
 					},
 				})
@@ -291,100 +357,126 @@ func CovertGemini2OpenAI(textRequest dto.GeneralOpenAIRequest, info *relaycommon
 	return &geminiRequest, nil
 }
 
+// Helper function to get a list of supported MIME types for error messages
+func getSupportedMimeTypesList() []string {
+	keys := make([]string, 0, len(geminiSupportedMimeTypes))
+	for k := range geminiSupportedMimeTypes {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
 // cleanFunctionParameters recursively removes unsupported fields from Gemini function parameters.
 func cleanFunctionParameters(params interface{}) interface{} {
 	if params == nil {
 		return nil
 	}
 
-	paramMap, ok := params.(map[string]interface{})
-	if !ok {
-		// Not a map, return as is (e.g., could be an array or primitive)
-		return params
-	}
+	switch v := params.(type) {
+	case map[string]interface{}:
+		// Create a copy to avoid modifying the original
+		cleanedMap := make(map[string]interface{})
+		for k, val := range v {
+			cleanedMap[k] = val
+		}
 
-	// Create a copy to avoid modifying the original
-	cleanedMap := make(map[string]interface{})
-	for k, v := range paramMap {
-		cleanedMap[k] = v
-	}
+		// Remove unsupported root-level fields
+		delete(cleanedMap, "default")
+		delete(cleanedMap, "exclusiveMaximum")
+		delete(cleanedMap, "exclusiveMinimum")
+		delete(cleanedMap, "$schema")
+		delete(cleanedMap, "additionalProperties")
 
-	// Remove unsupported root-level fields
-	delete(cleanedMap, "default")
-	delete(cleanedMap, "exclusiveMaximum")
-	delete(cleanedMap, "exclusiveMinimum")
-	delete(cleanedMap, "$schema")
-	delete(cleanedMap, "additionalProperties")
-
-	// Clean properties
-	if props, ok := cleanedMap["properties"].(map[string]interface{}); ok && props != nil {
-		cleanedProps := make(map[string]interface{})
-		for propName, propValue := range props {
-			propMap, ok := propValue.(map[string]interface{})
-			if !ok {
-				cleanedProps[propName] = propValue // Keep non-map properties
-				continue
-			}
-
-			// Create a copy of the property map
-			cleanedPropMap := make(map[string]interface{})
-			for k, v := range propMap {
-				cleanedPropMap[k] = v
-			}
-
-			// Remove unsupported fields
-			delete(cleanedPropMap, "default")
-			delete(cleanedPropMap, "exclusiveMaximum")
-			delete(cleanedPropMap, "exclusiveMinimum")
-			delete(cleanedPropMap, "$schema")
-			delete(cleanedPropMap, "additionalProperties")
-
-			// Check and clean 'format' for string types
-			if propType, typeExists := cleanedPropMap["type"].(string); typeExists && propType == "string" {
-				if formatValue, formatExists := cleanedPropMap["format"].(string); formatExists {
-					if formatValue != "enum" && formatValue != "date-time" {
-						delete(cleanedPropMap, "format")
-					}
+		// Check and clean 'format' for string types
+		if propType, typeExists := cleanedMap["type"].(string); typeExists && propType == "string" {
+			if formatValue, formatExists := cleanedMap["format"].(string); formatExists {
+				if formatValue != "enum" && formatValue != "date-time" {
+					delete(cleanedMap, "format")
 				}
 			}
+		}
 
-			// Recursively clean nested properties within this property if it's an object/array
-			// Check the type before recursing
-			if propType, typeExists := cleanedPropMap["type"].(string); typeExists && (propType == "object" || propType == "array") {
-				cleanedProps[propName] = cleanFunctionParameters(cleanedPropMap)
-			} else {
-				cleanedProps[propName] = cleanedPropMap // Assign the cleaned map back if not recursing
+		// Clean properties
+		if props, ok := cleanedMap["properties"].(map[string]interface{}); ok && props != nil {
+			cleanedProps := make(map[string]interface{})
+			for propName, propValue := range props {
+				cleanedProps[propName] = cleanFunctionParameters(propValue)
 			}
-
+			cleanedMap["properties"] = cleanedProps
 		}
-		cleanedMap["properties"] = cleanedProps
-	}
 
-	// Recursively clean items in arrays if needed (e.g., type: array, items: { ... })
-	if items, ok := cleanedMap["items"].(map[string]interface{}); ok && items != nil {
-		cleanedMap["items"] = cleanFunctionParameters(items)
-	}
-	// Also handle items if it's an array of schemas
-	if itemsArray, ok := cleanedMap["items"].([]interface{}); ok {
-		cleanedItemsArray := make([]interface{}, len(itemsArray))
-		for i, item := range itemsArray {
-			cleanedItemsArray[i] = cleanFunctionParameters(item)
+		// Recursively clean items in arrays
+		if items, ok := cleanedMap["items"].(map[string]interface{}); ok && items != nil {
+			cleanedMap["items"] = cleanFunctionParameters(items)
 		}
-		cleanedMap["items"] = cleanedItemsArray
-	}
-
-	// Recursively clean other schema composition keywords if necessary
-	for _, field := range []string{"allOf", "anyOf", "oneOf"} {
-		if nested, ok := cleanedMap[field].([]interface{}); ok {
-			cleanedNested := make([]interface{}, len(nested))
-			for i, item := range nested {
-				cleanedNested[i] = cleanFunctionParameters(item)
+		// Also handle items if it's an array of schemas
+		if itemsArray, ok := cleanedMap["items"].([]interface{}); ok {
+			cleanedItemsArray := make([]interface{}, len(itemsArray))
+			for i, item := range itemsArray {
+				cleanedItemsArray[i] = cleanFunctionParameters(item)
 			}
-			cleanedMap[field] = cleanedNested
+			cleanedMap["items"] = cleanedItemsArray
 		}
-	}
 
-	return cleanedMap
+		// Recursively clean other schema composition keywords
+		for _, field := range []string{"allOf", "anyOf", "oneOf"} {
+			if nested, ok := cleanedMap[field].([]interface{}); ok {
+				cleanedNested := make([]interface{}, len(nested))
+				for i, item := range nested {
+					cleanedNested[i] = cleanFunctionParameters(item)
+				}
+				cleanedMap[field] = cleanedNested
+			}
+		}
+
+		// Recursively clean patternProperties
+		if patternProps, ok := cleanedMap["patternProperties"].(map[string]interface{}); ok {
+			cleanedPatternProps := make(map[string]interface{})
+			for pattern, schema := range patternProps {
+				cleanedPatternProps[pattern] = cleanFunctionParameters(schema)
+			}
+			cleanedMap["patternProperties"] = cleanedPatternProps
+		}
+
+		// Recursively clean definitions
+		if definitions, ok := cleanedMap["definitions"].(map[string]interface{}); ok {
+			cleanedDefinitions := make(map[string]interface{})
+			for defName, defSchema := range definitions {
+				cleanedDefinitions[defName] = cleanFunctionParameters(defSchema)
+			}
+			cleanedMap["definitions"] = cleanedDefinitions
+		}
+
+		// Recursively clean $defs (newer JSON Schema draft)
+		if defs, ok := cleanedMap["$defs"].(map[string]interface{}); ok {
+			cleanedDefs := make(map[string]interface{})
+			for defName, defSchema := range defs {
+				cleanedDefs[defName] = cleanFunctionParameters(defSchema)
+			}
+			cleanedMap["$defs"] = cleanedDefs
+		}
+
+		// Clean conditional keywords
+		for _, field := range []string{"if", "then", "else", "not"} {
+			if nested, ok := cleanedMap[field]; ok {
+				cleanedMap[field] = cleanFunctionParameters(nested)
+			}
+		}
+
+		return cleanedMap
+
+	case []interface{}:
+		// Handle arrays of schemas
+		cleanedArray := make([]interface{}, len(v))
+		for i, item := range v {
+			cleanedArray[i] = cleanFunctionParameters(item)
+		}
+		return cleanedArray
+
+	default:
+		// Not a map or array, return as is (e.g., could be a primitive)
+		return params
+	}
 }
 
 func removeAdditionalPropertiesWithDepth(schema interface{}, depth int) interface{} {
@@ -526,14 +618,13 @@ func responseGeminiChat2OpenAI(response *GeminiChatResponse) *dto.OpenAITextResp
 		Created: common.GetTimestamp(),
 		Choices: make([]dto.OpenAITextResponseChoice, 0, len(response.Candidates)),
 	}
-	content, _ := json.Marshal("")
 	isToolCall := false
 	for _, candidate := range response.Candidates {
 		choice := dto.OpenAITextResponseChoice{
 			Index: int(candidate.Index),
 			Message: dto.Message{
 				Role:    "assistant",
-				Content: content,
+				Content: "",
 			},
 			FinishReason: constant.FinishReasonStop,
 		}
@@ -692,6 +783,13 @@ func GeminiChatStreamHandler(c *gin.Context, resp *http.Response, info *relaycom
 			usage.CompletionTokenDetails.ReasoningTokens = reasoningTokens
 			usage.CompletionTokenDetails.TextTokens = originalCompletionTokens // text_tokens = 原completion_tokens
 			usage.TotalTokens = geminiResponse.UsageMetadata.TotalTokenCount
+			for _, detail := range geminiResponse.UsageMetadata.PromptTokensDetails {
+				if detail.Modality == "AUDIO" {
+					usage.PromptTokensDetails.AudioTokens = detail.TokenCount
+				} else if detail.Modality == "TEXT" {
+					usage.PromptTokensDetails.TextTokens = detail.TokenCount
+				}
+			}
 		}
 		err = helper.ObjectData(c, response)
 		if err != nil {
@@ -773,6 +871,14 @@ func GeminiChatHandler(c *gin.Context, resp *http.Response, info *relaycommon.Re
 
 	usage.CompletionTokenDetails.ReasoningTokens = reasoningTokens
 	usage.CompletionTokenDetails.TextTokens = originalCompletionTokens // text_tokens = 原completion_tokens
+
+	for _, detail := range geminiResponse.UsageMetadata.PromptTokensDetails {
+		if detail.Modality == "AUDIO" {
+			usage.PromptTokensDetails.AudioTokens = detail.TokenCount
+		} else if detail.Modality == "TEXT" {
+			usage.PromptTokensDetails.TextTokens = detail.TokenCount
+		}
+	}
 
 	fullTextResponse.Usage = usage
 	jsonResponse, err := json.Marshal(fullTextResponse)
