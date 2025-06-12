@@ -168,7 +168,7 @@ export default function GeneralSettings(props) {
                   field={'ChannelQuotaCheckInterval'}
                   label={t('渠道限额检查间隔（秒）')}
                   initValue={''}
-                  placeholder={t('渠道限额检查间隔，单位秒，默认300秒')}
+                  placeholder={t('渠道限额检查间隔，单位秒，默认2秒')}
                   onChange={handleFieldChange('ChannelQuotaCheckInterval')}
                   showClear
                 />

@@ -1404,9 +1404,7 @@
   "适用于展示系统功能的场景。": "Suitable for scenarios where the system functions are displayed.",
   "可在初始化后修改": "Can be modified after initialization",
   "初始化系统": "Initialize system",
-<<<<<<< HEAD
-  "启用对话历史存储": "Enable conversation history storage"
-=======
+  "启用对话历史存储": "Enable conversation history storage",
   "支持众多的大模型供应商": "Supporting various LLM providers",
   "统一的大模型接口网关": "The Unified LLMs API Gateway",
   "更好的价格，更好的稳定性，无需订阅": "Better price, better stability, no subscription required",
@@ -1650,5 +1648,4 @@
   "维护中": "Maintenance",
   "暂无监控数据": "No monitoring data",
   "请联系管理员在系统设置中配置Uptime": "Please contact the administrator to configure Uptime in the system settings."
->>>>>>> 3d6859b865c8ea7b4709cd9572a4d05d1e2f0dde
 }
