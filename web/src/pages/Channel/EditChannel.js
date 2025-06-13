@@ -103,6 +103,9 @@ const EditChannel = (props) => {
     auto_reset_interval: 0,
     rpm_limit_enabled: false,
     rpm_limit: 0,
+    setting: '',
+    param_override: '',
+    status_code_mapping: '',
   };
   const [batch, setBatch] = useState(false);
   const [autoBan, setAutoBan] = useState(true);
@@ -204,6 +207,39 @@ const EditChannel = (props) => {
           2,
         );
       }
+      if (data.status_code_mapping !== '' && data.status_code_mapping !== undefined && data.status_code_mapping !== null) {
+        try {
+          data.status_code_mapping = JSON.stringify(
+            JSON.parse(data.status_code_mapping),
+            null,
+            2,
+          );
+        } catch (e) {
+          data.status_code_mapping = '';
+        }
+      }
+      if (data.setting !== '' && data.setting !== undefined && data.setting !== null) {
+        try {
+          data.setting = JSON.stringify(
+            JSON.parse(data.setting),
+            null,
+            2,
+          );
+        } catch (e) {
+          data.setting = '';
+        }
+      }
+      if (data.param_override !== '' && data.param_override !== undefined && data.param_override !== null) {
+        try {
+          data.param_override = JSON.stringify(
+            JSON.parse(data.param_override),
+            null,
+            2,
+          );
+        } catch (e) {
+          data.param_override = '';
+        }
+      }
       // 处理额度限制字段
       if (data.quota_limit_enabled === undefined || data.quota_limit_enabled === null) {
         data.quota_limit_enabled = false;
@@ -242,6 +278,18 @@ const EditChannel = (props) => {
       }
       if (data.rpm_limit === undefined || data.rpm_limit === null) {
         data.rpm_limit = 0;
+      }
+      // 处理额外设置字段
+      if (data.setting === undefined || data.setting === null) {
+        data.setting = '';
+      }
+      // 处理参数覆盖字段
+      if (data.param_override === undefined || data.param_override === null) {
+        data.param_override = '';
+      }
+      // 处理状态码映射字段
+      if (data.status_code_mapping === undefined || data.status_code_mapping === null) {
+        data.status_code_mapping = '';
       }
       setInputs(data);
       if (data.auto_ban === 0) {
@@ -383,6 +431,18 @@ const EditChannel = (props) => {
     }
     if (inputs.model_mapping !== '' && !verifyJSON(inputs.model_mapping)) {
       showInfo(t('模型映射必须是合法的 JSON 格式！'));
+      return;
+    }
+    if (inputs.setting !== '' && !verifyJSON(inputs.setting)) {
+      showInfo(t('渠道额外设置必须是合法的 JSON 格式！'));
+      return;
+    }
+    if (inputs.param_override !== '' && !verifyJSON(inputs.param_override)) {
+      showInfo(t('参数覆盖必须是合法的 JSON 格式！'));
+      return;
+    }
+    if (inputs.status_code_mapping !== '' && !verifyJSON(inputs.status_code_mapping)) {
+      showInfo(t('状态码复写必须是合法的 JSON 格式！'));
       return;
     }
     let localInputs = { ...inputs };
@@ -950,6 +1010,299 @@ const EditChannel = (props) => {
               </div>
             </Card>
 
+            {/* Advanced Settings Card */}
+            <Card className="!rounded-2xl shadow-sm border-0 mb-6">
+              <div className="flex items-center mb-4 p-6 rounded-xl" style={{
+                background: 'linear-gradient(135deg, #92400e 0%, #d97706 50%, #f59e0b 100%)',
+                position: 'relative'
+              }}>
+                <div className="absolute inset-0 overflow-hidden">
+                  <div className="absolute -top-10 -right-10 w-40 h-40 bg-white opacity-5 rounded-full"></div>
+                  <div className="absolute -bottom-8 -left-8 w-24 h-24 bg-white opacity-10 rounded-full"></div>
+                </div>
+                <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center mr-4 relative">
+                  <IconSetting size="large" style={{ color: '#ffffff' }} />
+                </div>
+                <div className="relative">
+                  <Text style={{ color: '#ffffff' }} className="text-lg font-medium">{t('高级设置')}</Text>
+                  <div style={{ color: '#ffffff' }} className="text-sm opacity-80">{t('渠道的高级配置选项')}</div>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <Text strong className="block mb-2">{t('分组')}</Text>
+                  <Select
+                    placeholder={t('请选择可以使用该渠道的分组')}
+                    name='groups'
+                    required
+                    multiple
+                    selection
+                    allowAdditions
+                    additionLabel={t('请在系统设置页面编辑分组倍率以添加新的分组：')}
+                    onChange={(value) => handleInputChange('groups', value)}
+                    value={inputs.groups}
+                    autoComplete='new-password'
+                    optionList={groupOptions}
+                    size="large"
+                    className="!rounded-lg"
+                  />
+                </div>
+
+                {inputs.type === 18 && (
+                  <div>
+                    <Text strong className="block mb-2">{t('模型版本')}</Text>
+                    <Input
+                      name='other'
+                      placeholder={'请输入星火大模型版本，注意是接口地址中的版本号，例如：v2.1'}
+                      onChange={(value) => handleInputChange('other', value)}
+                      value={inputs.other}
+                      autoComplete='new-password'
+                      size="large"
+                      className="!rounded-lg"
+                    />
+                  </div>
+                )}
+
+                {inputs.type === 41 && (
+                  <div>
+                    <Text strong className="block mb-2">{t('部署地区')}</Text>
+                    <TextArea
+                      name='other'
+                      placeholder={t(
+                        '请输入部署地区，例如：us-central1\n支持使用模型映射格式\n' +
+                        '{\n' +
+                        '    "default": "us-central1",\n' +
+                        '    "claude-3-5-sonnet-20240620": "europe-west1"\n' +
+                        '}'
+                      )}
+                      autosize={{ minRows: 2 }}
+                      onChange={(value) => handleInputChange('other', value)}
+                      value={inputs.other}
+                      autoComplete='new-password'
+                      className="!rounded-lg font-mono"
+                    />
+                    <Text
+                      className="!text-semi-color-primary cursor-pointer mt-1 block"
+                      onClick={() => handleInputChange('other', JSON.stringify(REGION_EXAMPLE, null, 2))}
+                    >
+                      {t('填入模板')}
+                    </Text>
+                  </div>
+                )}
+
+                {inputs.type === 21 && (
+                  <div>
+                    <Text strong className="block mb-2">{t('知识库 ID')}</Text>
+                    <Input
+                      name='other'
+                      placeholder={'请输入知识库 ID，例如：123456'}
+                      onChange={(value) => handleInputChange('other', value)}
+                      value={inputs.other}
+                      autoComplete='new-password'
+                      size="large"
+                      className="!rounded-lg"
+                    />
+                  </div>
+                )}
+
+                {inputs.type === 39 && (
+                  <div>
+                    <Text strong className="block mb-2">Account ID</Text>
+                    <Input
+                      name='other'
+                      placeholder={'请输入Account ID，例如：d6b5da8hk1awo8nap34ube6gh'}
+                      onChange={(value) => handleInputChange('other', value)}
+                      value={inputs.other}
+                      autoComplete='new-password'
+                      size="large"
+                      className="!rounded-lg"
+                    />
+                  </div>
+                )}
+
+                {inputs.type === 49 && (
+                  <div>
+                    <Text strong className="block mb-2">{t('智能体ID')}</Text>
+                    <Input
+                      name='other'
+                      placeholder={'请输入智能体ID，例如：7342866812345'}
+                      onChange={(value) => handleInputChange('other', value)}
+                      value={inputs.other}
+                      autoComplete='new-password'
+                      size="large"
+                      className="!rounded-lg"
+                    />
+                  </div>
+                )}
+
+                <div>
+                  <Text strong className="block mb-2">{t('渠道标签')}</Text>
+                  <Input
+                    name='tag'
+                    placeholder={t('渠道标签')}
+                    onChange={(value) => handleInputChange('tag', value)}
+                    value={inputs.tag}
+                    autoComplete='new-password'
+                    size="large"
+                    className="!rounded-lg"
+                  />
+                </div>
+
+                <div>
+                  <Text strong className="block mb-2">{t('渠道优先级')}</Text>
+                  <Input
+                    name='priority'
+                    placeholder={t('渠道优先级')}
+                    onChange={(value) => {
+                      const number = parseInt(value);
+                      if (isNaN(number)) {
+                        handleInputChange('priority', value);
+                      } else {
+                        handleInputChange('priority', number);
+                      }
+                    }}
+                    value={inputs.priority}
+                    autoComplete='new-password'
+                    size="large"
+                    className="!rounded-lg"
+                  />
+                </div>
+
+                <div>
+                  <Text strong className="block mb-2">{t('渠道权重')}</Text>
+                  <Input
+                    name='weight'
+                    placeholder={t('渠道权重')}
+                    onChange={(value) => {
+                      const number = parseInt(value);
+                      if (isNaN(number)) {
+                        handleInputChange('weight', value);
+                      } else {
+                        handleInputChange('weight', number);
+                      }
+                    }}
+                    value={inputs.weight}
+                    autoComplete='new-password'
+                    size="large"
+                    className="!rounded-lg"
+                  />
+                </div>
+
+                <div>
+                  <Text strong className="block mb-2">{t('渠道额外设置')}</Text>
+                  <TextArea
+                    placeholder={
+                      t('此项可选，用于配置渠道特定设置，为一个 JSON 字符串，例如：') +
+                      '\n{\n  "force_format": true\n}'
+                    }
+                    name='setting'
+                    onChange={(value) => handleInputChange('setting', value)}
+                    autosize
+                    value={inputs.setting}
+                    autoComplete='new-password'
+                    className="!rounded-lg font-mono"
+                  />
+                  <div className="flex gap-2 mt-1">
+                    <Text
+                      className="!text-semi-color-primary cursor-pointer"
+                      onClick={() => {
+                        handleInputChange(
+                          'setting',
+                          JSON.stringify({ force_format: true }, null, 2),
+                        );
+                      }}
+                    >
+                      {t('填入模板')}
+                    </Text>
+                    <Text
+                      className="!text-semi-color-primary cursor-pointer"
+                      onClick={() => {
+                        window.open(
+                          'https://github.com/QuantumNous/new-api/blob/main/docs/channel/other_setting.md',
+                        );
+                      }}
+                    >
+                      {t('设置说明')}
+                    </Text>
+                  </div>
+                </div>
+
+                <div>
+                  <Text strong className="block mb-2">{t('参数覆盖')}</Text>
+                  <TextArea
+                    placeholder={
+                      t('此项可选，用于覆盖请求参数。不支持覆盖 stream 参数。为一个 JSON 字符串，例如：') +
+                      '\n{\n  "temperature": 0\n}'
+                    }
+                    name='param_override'
+                    onChange={(value) => handleInputChange('param_override', value)}
+                    autosize
+                    value={inputs.param_override}
+                    autoComplete='new-password'
+                    className="!rounded-lg font-mono"
+                  />
+                </div>
+
+                {inputs.type === 1 && (
+                  <div>
+                    <Text strong className="block mb-2">{t('组织')}</Text>
+                    <Input
+                      name='openai_organization'
+                      placeholder={t('请输入组织org-xxx')}
+                      onChange={(value) => handleInputChange('openai_organization', value)}
+                      value={inputs.openai_organization}
+                      size="large"
+                      className="!rounded-lg"
+                    />
+                    <Text type="tertiary" className="mt-1 text-xs">
+                      {t('组织，可选，不填则为默认组织')}
+                    </Text>
+                  </div>
+                )}
+
+                <div className="flex items-center">
+                  <Checkbox
+                    checked={autoBan}
+                    onChange={() => setAutoBan(!autoBan)}
+                  />
+                  <Text strong className="ml-2">
+                    {t('是否自动禁用（仅当自动禁用开启时有效），关闭后不会自动禁用该渠道')}
+                  </Text>
+                </div>
+
+                <div>
+                  <Text strong className="block mb-2">
+                    {t('状态码复写（仅影响本地判断，不修改返回到上游的状态码）')}
+                  </Text>
+                  <TextArea
+                    placeholder={
+                      t('此项可选，用于复写返回的状态码，比如将claude渠道的400错误复写为500（用于重试），请勿滥用该功能，例如：') +
+                      '\n' +
+                      JSON.stringify(STATUS_CODE_MAPPING_EXAMPLE, null, 2)
+                    }
+                    name='status_code_mapping'
+                    onChange={(value) => handleInputChange('status_code_mapping', value)}
+                    autosize
+                    value={inputs.status_code_mapping}
+                    autoComplete='new-password'
+                    className="!rounded-lg font-mono"
+                  />
+                  <Text
+                    className="!text-semi-color-primary cursor-pointer mt-1 block"
+                    onClick={() => {
+                      handleInputChange(
+                        'status_code_mapping',
+                        JSON.stringify(STATUS_CODE_MAPPING_EXAMPLE, null, 2),
+                      );
+                    }}
+                  >
+                    {t('填入模板')}
+                  </Text>
+                </div>
+              </div>
+            </Card>
+
             {/* Quota and Limit Configuration Card */}
             <Card className="!rounded-2xl shadow-sm border-0 mb-6">
               <div className="flex items-center mb-4 p-6 rounded-xl" style={{
@@ -1142,38 +1495,11 @@ const EditChannel = (props) => {
                   )}
                 </div>
 
-                {/* 状态码复写 */}
-                <div>
-                  <Text strong className="block mb-2">
-                    {t('状态码复写（仅影响本地判断，不修改返回到上游的状态码）')}
-                  </Text>
-                  <TextArea
-                    placeholder={
-                      t('此项可选，用于复写返回的状态码，比如将claude渠道的400错误复写为500（用于重试），请勿滥用该功能，例如：') +
-                      '\n' +
-                      JSON.stringify(STATUS_CODE_MAPPING_EXAMPLE, null, 2)
-                    }
-                    name='status_code_mapping'
-                    onChange={(value) => handleInputChange('status_code_mapping', value)}
-                    autosize
-                    value={inputs.status_code_mapping}
-                    autoComplete='new-password'
-                    className="!rounded-lg font-mono"
-                  />
-                  <Text
-                    className="!text-semi-color-primary cursor-pointer mt-1 block"
-                    onClick={() => {
-                      handleInputChange(
-                        'status_code_mapping',
-                        JSON.stringify(STATUS_CODE_MAPPING_EXAMPLE, null, 2),
-                      );
-                    }}
-                  >
-                    {t('填入模板')}
-                  </Text>
-                </div>
+
               </div>
             </Card>
+
+
           </div>
         </Spin>
         <ImagePreview
