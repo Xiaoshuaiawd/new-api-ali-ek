@@ -311,7 +311,7 @@ func SearchChannels(keyword string, group string, model string, idSort bool) ([]
 	}
 
 	// 构造基础查询
-	baseQuery := DB.Model(&Channel{}).Omit(keyCol)
+	baseQuery := DB.Model(&Channel{}).Omit("key")
 
 	// 构造WHERE子句
 	var whereClause string
@@ -319,15 +319,15 @@ func SearchChannels(keyword string, group string, model string, idSort bool) ([]
 	if group != "" && group != "null" {
 		var groupCondition string
 		if common.UsingMySQL {
-			groupCondition = `CONCAT(',', ` + groupCol + `, ',') LIKE ?`
+			groupCondition = `CONCAT(',', ` + commonGroupCol + `, ',') LIKE ?`
 		} else {
 			// sqlite, PostgreSQL
-			groupCondition = `(',' || ` + groupCol + ` || ',') LIKE ?`
+			groupCondition = `(',' || ` + commonGroupCol + ` || ',') LIKE ?`
 		}
-		whereClause = "(id = ? OR name LIKE ? OR " + keyCol + " = ? OR " + baseURLCol + " LIKE ?) AND " + modelsCol + ` LIKE ? AND ` + groupCondition
+		whereClause = "(id = ? OR name LIKE ? OR " + commonKeyCol + " = ? OR " + baseURLCol + " LIKE ?) AND " + modelsCol + ` LIKE ? AND ` + groupCondition
 		args = append(args, common.String2Int(keyword), "%"+keyword+"%", keyword, "%"+keyword+"%", "%"+model+"%", "%,"+group+",%")
 	} else {
-		whereClause = "(id = ? OR name LIKE ? OR " + keyCol + " = ? OR " + baseURLCol + " LIKE ?) AND " + modelsCol + " LIKE ?"
+		whereClause = "(id = ? OR name LIKE ? OR " + commonKeyCol + " = ? OR " + baseURLCol + " LIKE ?) AND " + modelsCol + " LIKE ?"
 		args = append(args, common.String2Int(keyword), "%"+keyword+"%", keyword, "%"+keyword+"%", "%"+model+"%")
 	}
 
@@ -672,7 +672,7 @@ func SearchTags(keyword string, group string, model string, idSort bool) ([]*str
 	}
 
 	// 构造基础查询
-	baseQuery := DB.Model(&Channel{}).Omit(keyCol)
+	baseQuery := DB.Model(&Channel{}).Omit("key")
 
 	// 构造WHERE子句
 	var whereClause string
@@ -680,15 +680,15 @@ func SearchTags(keyword string, group string, model string, idSort bool) ([]*str
 	if group != "" && group != "null" {
 		var groupCondition string
 		if common.UsingMySQL {
-			groupCondition = `CONCAT(',', ` + groupCol + `, ',') LIKE ?`
+			groupCondition = `CONCAT(',', ` + commonGroupCol + `, ',') LIKE ?`
 		} else {
 			// sqlite, PostgreSQL
-			groupCondition = `(',' || ` + groupCol + ` || ',') LIKE ?`
+			groupCondition = `(',' || ` + commonGroupCol + ` || ',') LIKE ?`
 		}
-		whereClause = "(id = ? OR name LIKE ? OR " + keyCol + " = ? OR " + baseURLCol + " LIKE ?) AND " + modelsCol + ` LIKE ? AND ` + groupCondition
+		whereClause = "(id = ? OR name LIKE ? OR " + commonKeyCol + " = ? OR " + baseURLCol + " LIKE ?) AND " + modelsCol + ` LIKE ? AND ` + groupCondition
 		args = append(args, common.String2Int(keyword), "%"+keyword+"%", keyword, "%"+keyword+"%", "%"+model+"%", "%,"+group+",%")
 	} else {
-		whereClause = "(id = ? OR name LIKE ? OR " + keyCol + " = ? OR " + baseURLCol + " LIKE ?) AND " + modelsCol + " LIKE ?"
+		whereClause = "(id = ? OR name LIKE ? OR " + commonKeyCol + " = ? OR " + baseURLCol + " LIKE ?) AND " + modelsCol + " LIKE ?"
 		args = append(args, common.String2Int(keyword), "%"+keyword+"%", keyword, "%"+keyword+"%", "%"+model+"%")
 	}
 
@@ -776,6 +776,20 @@ func BatchSetChannelTag(ids []int, tag *string) error {
 
 	// 提交事务
 	return tx.Commit().Error
+}
+
+// CountAllChannels returns total channels in DB
+func CountAllChannels() (int64, error) {
+	var total int64
+	err := DB.Model(&Channel{}).Count(&total).Error
+	return total, err
+}
+
+// CountAllTags returns number of non-empty distinct tags
+func CountAllTags() (int64, error) {
+	var total int64
+	err := DB.Model(&Channel{}).Where("tag is not null AND tag != ''").Distinct("tag").Count(&total).Error
+	return total, err
 }
 
 // GetChannelsWithQuotaLimitEnabled 获取所有启用限额的渠道
