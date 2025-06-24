@@ -20,8 +20,8 @@ import (
 )
 
 const (
-	InitialScannerBufferSize = 64 << 10  // 64KB (64*1024)
-	MaxScannerBufferSize     = 10 << 20  // 10MB (10*1024*1024)
+	InitialScannerBufferSize = 64 << 10 // 64KB (64*1024)
+	MaxScannerBufferSize     = 10 << 20 // 10MB (10*1024*1024)
 	DefaultPingInterval      = 10 * time.Second
 )
 
@@ -49,7 +49,7 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 		scanner    = bufio.NewScanner(resp.Body)
 		ticker     = time.NewTicker(streamingTimeout)
 		pingTicker *time.Ticker
-		writeMutex sync.Mutex // Mutex to protect concurrent writes
+		writeMutex sync.Mutex     // Mutex to protect concurrent writes
 		wg         sync.WaitGroup // 用于等待所有 goroutine 退出
 	)
 
@@ -68,28 +68,28 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 	defer func() {
 		// 通知所有 goroutine 停止
 		common.SafeSendBool(stopChan, true)
-		
+
 		ticker.Stop()
 		if pingTicker != nil {
 			pingTicker.Stop()
 		}
-		
+
 		// 等待所有 goroutine 退出，最多等待5秒
 		done := make(chan struct{})
 		go func() {
 			wg.Wait()
 			close(done)
 		}()
-		
+
 		select {
 		case <-done:
 		case <-time.After(5 * time.Second):
 			common.LogError(c, "timeout waiting for goroutines to exit")
 		}
-		
+
 		close(stopChan)
 	}()
-	
+
 	scanner.Buffer(make([]byte, InitialScannerBufferSize), MaxScannerBufferSize)
 	scanner.Split(bufio.ScanLines)
 	SetEventStreamHeaders(c)
@@ -113,12 +113,12 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 					println("ping goroutine exited")
 				}
 			}()
-			
+
 			// 添加超时保护，防止 goroutine 无限运行
 			maxPingDuration := 30 * time.Minute // 最大 ping 持续时间
 			pingTimeout := time.NewTimer(maxPingDuration)
 			defer pingTimeout.Stop()
-			
+
 			for {
 				select {
 				case <-pingTicker.C:
@@ -129,7 +129,7 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 						defer writeMutex.Unlock()
 						done <- PingData(c)
 					}()
-					
+
 					select {
 					case err := <-done:
 						if err != nil {
@@ -175,7 +175,7 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 				println("scanner goroutine exited")
 			}
 		}()
-		
+
 		for scanner.Scan() {
 			// 检查是否需要停止
 			select {
@@ -187,7 +187,7 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 				return
 			default:
 			}
-			
+
 			ticker.Reset(streamingTimeout)
 			data := scanner.Text()
 			if common.DebugEnabled {
@@ -205,7 +205,7 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 			data = strings.TrimSuffix(data, "\r")
 			if !strings.HasPrefix(data, "[DONE]") {
 				info.SetFirstResponseTime()
-				
+
 				// 使用超时机制防止写操作阻塞
 				done := make(chan bool, 1)
 				go func() {
@@ -213,7 +213,7 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 					defer writeMutex.Unlock()
 					done <- dataHandler(data)
 				}()
-				
+
 				select {
 				case success := <-done:
 					if !success {

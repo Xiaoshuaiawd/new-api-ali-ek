@@ -67,6 +67,10 @@ func Relay(c *gin.Context) {
 		// 检查RPM限制
 		if service.CheckChannelRPMLimit(channel.Id) {
 			common.LogInfo(c, fmt.Sprintf("渠道 #%d RPM限制超限，切换到其他渠道", channel.Id))
+			// 记录RPM限制导致的重试
+			if i > 0 {
+				common.ChannelRetryCount.WithLabelValues(fmt.Sprintf("%d", channel.Id), channel.Name, "rpm_limit").Inc()
+			}
 			continue // 跳过此渠道，尝试下一个
 		}
 
@@ -84,6 +88,11 @@ func Relay(c *gin.Context) {
 			// 立即禁用渠道
 			service.DisableChannel(channel.Id, channel.Name, fmt.Sprintf("立即禁用 - 状态码: %d, 错误: %s", openaiErr.StatusCode, openaiErr.Error.Message))
 			common.LogError(c, fmt.Sprintf("立即禁用渠道 #%d，状态码: %d，继续重试其他渠道", channel.Id, openaiErr.StatusCode))
+			// 记录立即禁用导致的重试
+			if i > 0 {
+				retryReason := getRetryReason(openaiErr)
+				common.ChannelRetryCount.WithLabelValues(fmt.Sprintf("%d", channel.Id), channel.Name, retryReason+"_disabled").Inc()
+			}
 			// 继续重试其他渠道
 			continue
 		}
@@ -92,6 +101,12 @@ func Relay(c *gin.Context) {
 
 		if !shouldRetry(c, openaiErr, common.RetryTimes-i) {
 			break
+		}
+
+		// 记录重试次数 (从第二次请求开始记录重试)
+		if i > 0 {
+			retryReason := getRetryReason(openaiErr)
+			common.ChannelRetryCount.WithLabelValues(fmt.Sprintf("%d", channel.Id), channel.Name, retryReason).Inc()
 		}
 	}
 	useChannel := c.GetStringSlice("use_channel")
@@ -181,6 +196,10 @@ func WssRelay(c *gin.Context) {
 		// 检查RPM限制
 		if service.CheckChannelRPMLimit(channel.Id) {
 			common.LogInfo(c, fmt.Sprintf("渠道 #%d RPM限制超限，切换到其他渠道", channel.Id))
+			// 记录RPM限制导致的重试
+			if i > 0 {
+				common.ChannelRetryCount.WithLabelValues(fmt.Sprintf("%d", channel.Id), channel.Name, "rpm_limit").Inc()
+			}
 			continue // 跳过此渠道，尝试下一个
 		}
 
@@ -198,6 +217,11 @@ func WssRelay(c *gin.Context) {
 			// 立即禁用渠道
 			service.DisableChannel(channel.Id, channel.Name, fmt.Sprintf("立即禁用 - 状态码: %d, 错误: %s", openaiErr.StatusCode, openaiErr.Error.Message))
 			common.LogError(c, fmt.Sprintf("立即禁用渠道 #%d，状态码: %d，继续重试其他渠道", channel.Id, openaiErr.StatusCode))
+			// 记录立即禁用导致的重试
+			if i > 0 {
+				retryReason := getRetryReason(openaiErr)
+				common.ChannelRetryCount.WithLabelValues(fmt.Sprintf("%d", channel.Id), channel.Name, retryReason+"_disabled").Inc()
+			}
 			// 继续重试其他渠道
 			continue
 		}
@@ -206,6 +230,12 @@ func WssRelay(c *gin.Context) {
 
 		if !shouldRetry(c, openaiErr, common.RetryTimes-i) {
 			break
+		}
+
+		// 记录重试次数 (从第二次请求开始记录重试)
+		if i > 0 {
+			retryReason := getRetryReason(openaiErr)
+			common.ChannelRetryCount.WithLabelValues(fmt.Sprintf("%d", channel.Id), channel.Name, retryReason).Inc()
 		}
 	}
 	useChannel := c.GetStringSlice("use_channel")
@@ -273,6 +303,10 @@ func RelayClaude(c *gin.Context) {
 		// 检查RPM限制
 		if service.CheckChannelRPMLimit(channel.Id) {
 			common.LogInfo(c, fmt.Sprintf("渠道 #%d RPM限制超限，切换到其他渠道", channel.Id))
+			// 记录RPM限制导致的重试
+			if i > 0 {
+				common.ChannelRetryCount.WithLabelValues(fmt.Sprintf("%d", channel.Id), channel.Name, "rpm_limit").Inc()
+			}
 			continue // 跳过此渠道，尝试下一个
 		}
 
@@ -292,6 +326,11 @@ func RelayClaude(c *gin.Context) {
 			// 立即禁用渠道
 			service.DisableChannel(channel.Id, channel.Name, fmt.Sprintf("立即禁用 - 状态码: %d, 错误: %s", openaiErr.StatusCode, openaiErr.Error.Message))
 			common.LogError(c, fmt.Sprintf("立即禁用渠道 #%d，状态码: %d，继续重试其他渠道", channel.Id, openaiErr.StatusCode))
+			// 记录立即禁用导致的重试
+			if i > 0 {
+				retryReason := getRetryReason(openaiErr)
+				common.ChannelRetryCount.WithLabelValues(fmt.Sprintf("%d", channel.Id), channel.Name, retryReason+"_disabled").Inc()
+			}
 			// 继续重试其他渠道
 			continue
 		}
@@ -300,6 +339,12 @@ func RelayClaude(c *gin.Context) {
 
 		if !shouldRetry(c, openaiErr, common.RetryTimes-i) {
 			break
+		}
+
+		// 记录重试次数 (从第二次请求开始记录重试)
+		if i > 0 {
+			retryReason := getRetryReason(openaiErr)
+			common.ChannelRetryCount.WithLabelValues(fmt.Sprintf("%d", channel.Id), channel.Name, retryReason).Inc()
 		}
 	}
 	useChannel := c.GetStringSlice("use_channel")
@@ -622,4 +667,43 @@ func shouldRetryTaskRelay(c *gin.Context, channelId int, taskErr *dto.TaskError,
 
 	// 所有其他错误都重试
 	return true
+}
+
+// getRetryReason 获取重试原因
+func getRetryReason(openaiErr *dto.OpenAIErrorWithStatusCode) string {
+	if openaiErr == nil {
+		return "unknown"
+	}
+
+	if openaiErr.StatusCode == http.StatusTooManyRequests {
+		return "rate_limit"
+	}
+	if openaiErr.StatusCode == http.StatusInternalServerError {
+		return "server_error"
+	}
+	if openaiErr.StatusCode == http.StatusBadGateway {
+		return "bad_gateway"
+	}
+	if openaiErr.StatusCode == http.StatusServiceUnavailable {
+		return "service_unavailable"
+	}
+	if openaiErr.StatusCode == http.StatusGatewayTimeout {
+		return "gateway_timeout"
+	}
+	if openaiErr.StatusCode == http.StatusUnauthorized {
+		return "unauthorized"
+	}
+	if openaiErr.StatusCode == http.StatusForbidden {
+		return "forbidden"
+	}
+
+	// 根据错误类型分类
+	if openaiErr.Error.Type == "empty_response" {
+		return "empty_response"
+	}
+	if openaiErr.Error.Type == "insufficient_quota" {
+		return "insufficient_quota"
+	}
+
+	return fmt.Sprintf("http_%d", openaiErr.StatusCode)
 }

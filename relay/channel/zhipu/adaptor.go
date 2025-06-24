@@ -78,6 +78,11 @@ func (a *Adaptor) ConvertOpenAIResponsesRequest(c *gin.Context, info *relaycommo
 }
 
 func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) (usage any, err *dto.OpenAIErrorWithStatusCode) {
+	// 为Prometheus监控设置渠道状态码
+	if resp != nil {
+		c.Set("channel_status", resp.StatusCode)
+	}
+	
 	if info.IsStream {
 		err, usage = zhipuStreamHandler(c, resp)
 	} else {
