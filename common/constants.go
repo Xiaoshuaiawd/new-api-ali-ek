@@ -245,6 +245,7 @@ const (
 	ChannelTypeXinference     = 47
 	ChannelTypeXai            = 48
 	ChannelTypeCoze           = 49
+	ChannelTypeKling          = 50
 	ChannelTypeDummy          // this one is only for count, do not add any channel after this
 
 )
@@ -300,4 +301,5 @@ var ChannelBaseURLs = []string{
 	"",                                          //47
 	"https://api.x.ai",                          //48
 	"https://api.coze.cn",                       //49
+	"https://api.klingai.com",                   //50
 }

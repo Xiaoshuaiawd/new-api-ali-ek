@@ -964,3 +964,39 @@ func (channel *Channel) SetRPMLimitEnabled(enabled bool) {
 func (channel *Channel) SetRPMLimit(limit int64) {
 	channel.RPMLimit = &limit
 }
+
+// Get channels of specified type with pagination
+func GetChannelsByType(startIdx int, num int, idSort bool, channelType int) ([]*Channel, error) {
+	var channels []*Channel
+	order := "priority desc"
+	if idSort {
+		order = "id desc"
+	}
+	err := DB.Where("type = ?", channelType).Order(order).Limit(num).Offset(startIdx).Omit("key").Find(&channels).Error
+	return channels, err
+}
+
+// Count channels of specific type
+func CountChannelsByType(channelType int) (int64, error) {
+	var count int64
+	err := DB.Model(&Channel{}).Where("type = ?", channelType).Count(&count).Error
+	return count, err
+}
+
+// Return map[type]count for all channels
+func CountChannelsGroupByType() (map[int64]int64, error) {
+	type result struct {
+		Type  int64 `gorm:"column:type"`
+		Count int64 `gorm:"column:count"`
+	}
+	var results []result
+	err := DB.Model(&Channel{}).Select("type, count(*) as count").Group("type").Find(&results).Error
+	if err != nil {
+		return nil, err
+	}
+	counts := make(map[int64]int64)
+	for _, r := range results {
+		counts[r.Type] = r.Count
+	}
+	return counts, nil
+}

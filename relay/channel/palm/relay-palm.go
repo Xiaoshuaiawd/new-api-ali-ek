@@ -162,7 +162,7 @@ func palmHandler(c *gin.Context, resp *http.Response, promptTokens int, model st
 		return service.CreateEmptyResponseError(), nil
 	}
 
-	completionTokens, _ := service.CountTextToken(palmResponse.Candidates[0].Content, model)
+	completionTokens := service.CountTextToken(palmResponse.Candidates[0].Content, model)
 	usage := dto.Usage{
 		PromptTokens:     promptTokens,
 		CompletionTokens: completionTokens,

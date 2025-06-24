@@ -6,7 +6,6 @@ import {
   Form,
   Row,
   Spin,
-  Collapse,
   Modal,
   Tooltip,
 } from '@douyinfe/semi-ui';
@@ -111,10 +110,6 @@ export default function GeneralSettings(props) {
   return (
     <>
       <Spin spinning={loading}>
-        <Banner
-          type='warning'
-          description={t('聊天链接功能已经弃用，请使用下方聊天设置功能')}
-        />
         <Form
           values={inputs}
           getFormApi={(formAPI) => (refForm.current = formAPI)}

@@ -50,6 +50,22 @@ func addNewRecord(type_ int, id int, value int) {
 }
 
 func batchUpdate() {
+	// check if there's any data to update
+	hasData := false
+	for i := 0; i < BatchUpdateTypeCount; i++ {
+		batchUpdateLocks[i].Lock()
+		if len(batchUpdateStores[i]) > 0 {
+			hasData = true
+			batchUpdateLocks[i].Unlock()
+			break
+		}
+		batchUpdateLocks[i].Unlock()
+	}
+
+	if !hasData {
+		return
+	}
+
 	common.SysLog("batch update started")
 	for i := 0; i < BatchUpdateTypeCount; i++ {
 		batchUpdateLocks[i].Lock()

@@ -11,6 +11,7 @@ import (
 	relayconstant "one-api/relay/constant"
 	"one-api/service"
 	"one-api/setting"
+	"one-api/setting/ratio_setting"
 	"strconv"
 	"strings"
 	"time"
@@ -48,7 +49,7 @@ func Distribute() func(c *gin.Context) {
 				return
 			}
 			// check group in common.GroupRatio
-			if !setting.ContainsGroupRatio(tokenGroup) {
+			if !ratio_setting.ContainsGroupRatio(tokenGroup) {
 				if tokenGroup != "auto" {
 					abortWithOpenAiMessage(c, http.StatusForbidden, fmt.Sprintf("分组 %s 已被弃用", tokenGroup))
 					return
@@ -168,6 +169,15 @@ func getModelRequest(c *gin.Context) (*ModelRequest, bool, error) {
 			modelRequest.Model = modelName
 		}
 		c.Set("platform", string(constant.TaskPlatformSuno))
+		c.Set("relay_mode", relayMode)
+	} else if strings.Contains(c.Request.URL.Path, "/v1/video/generations") {
+		relayMode := relayconstant.Path2RelayKling(c.Request.Method, c.Request.URL.Path)
+		if relayMode == relayconstant.RelayModeKlingFetchByID {
+			shouldSelectChannel = false
+		} else {
+			err = common.UnmarshalBodyReusable(c, &modelRequest)
+		}
+		c.Set("platform", string(constant.TaskPlatformKling))
 		c.Set("relay_mode", relayMode)
 	} else if strings.HasPrefix(c.Request.URL.Path, "/v1beta/models/") {
 		// Gemini API 路径处理: /v1beta/models/gemini-2.0-flash:generateContent
