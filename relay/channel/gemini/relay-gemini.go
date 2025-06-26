@@ -338,6 +338,39 @@ func CovertGemini2OpenAI(textRequest dto.GeneralOpenAIRequest, info *relaycommon
 						},
 					})
 				}
+			} else if part.Type == dto.ContentTypeAudioURL {
+				// 判断是否是url
+				if strings.HasPrefix(part.GetAudioMedia().Url, "http") {
+					// 是url，获取文件的类型和base64编码的数据
+					fileData, err := service.GetFileBase64FromUrl(part.GetAudioMedia().Url)
+					if err != nil {
+						return nil, fmt.Errorf("get file base64 from url '%s' failed: %w", part.GetAudioMedia().Url, err)
+					}
+
+					// 校验 MimeType 是否在 Gemini 支持的白名单中
+					if _, ok := geminiSupportedMimeTypes[strings.ToLower(fileData.MimeType)]; !ok {
+						url := part.GetAudioMedia().Url
+						return nil, fmt.Errorf("mime type is not supported by Gemini: '%s', url: '%s', supported types are: %v", fileData.MimeType, url, getSupportedMimeTypesList())
+					}
+
+					parts = append(parts, GeminiPart{
+						InlineData: &GeminiInlineData{
+							MimeType: fileData.MimeType, // 使用原始的 MimeType，因为大小写可能对API有意义
+							Data:     fileData.Base64Data,
+						},
+					})
+				} else {
+					format, base64String, err := service.DecodeBase64FileData(part.GetAudioMedia().Url)
+					if err != nil {
+						return nil, fmt.Errorf("decode base64 audio data failed: %s", err.Error())
+					}
+					parts = append(parts, GeminiPart{
+						InlineData: &GeminiInlineData{
+							MimeType: format,
+							Data:     base64String,
+						},
+					})
+				}
 			} else if part.Type == dto.ContentTypeFile {
 				if part.GetFile().FileId != "" {
 					return nil, fmt.Errorf("only base64 file is supported in gemini")

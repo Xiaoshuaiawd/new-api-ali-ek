@@ -126,6 +126,7 @@ type MediaContent struct {
 	Type       string `json:"type"`
 	Text       string `json:"text,omitempty"`
 	ImageUrl   any    `json:"image_url,omitempty"`
+	AudioUrl   any    `json:"audio_url,omitempty"`
 	InputAudio any    `json:"input_audio,omitempty"`
 	File       any    `json:"file,omitempty"`
 	VideoUrl   any    `json:"video_url,omitempty"`
@@ -142,6 +143,22 @@ func (m *MediaContent) GetImageMedia() *MessageImageUrl {
 			out := &MessageImageUrl{
 				Url:      common.Interface2String(itemMap["url"]),
 				Detail:   common.Interface2String(itemMap["detail"]),
+				MimeType: common.Interface2String(itemMap["mime_type"]),
+			}
+			return out
+		}
+	}
+	return nil
+}
+
+func (m *MediaContent) GetAudioMedia() *MessageAudioUrl {
+	if m.AudioUrl != nil {
+		if _, ok := m.AudioUrl.(*MessageAudioUrl); ok {
+			return m.AudioUrl.(*MessageAudioUrl)
+		}
+		if itemMap, ok := m.AudioUrl.(map[string]any); ok {
+			out := &MessageAudioUrl{
+				Url:      common.Interface2String(itemMap["url"]),
 				MimeType: common.Interface2String(itemMap["mime_type"]),
 			}
 			return out
@@ -193,6 +210,15 @@ func (m *MessageImageUrl) IsRemoteImage() bool {
 	return strings.HasPrefix(m.Url, "http")
 }
 
+type MessageAudioUrl struct {
+	Url      string `json:"url"`
+	MimeType string
+}
+
+func (m *MessageAudioUrl) IsRemoteAudio() bool {
+	return strings.HasPrefix(m.Url, "http")
+}
+
 type MessageInputAudio struct {
 	Data   string `json:"data"` //base64
 	Format string `json:"format"`
@@ -211,6 +237,7 @@ type MessageVideoUrl struct {
 const (
 	ContentTypeText       = "text"
 	ContentTypeImageURL   = "image_url"
+	ContentTypeAudioURL   = "audio_url"
 	ContentTypeInputAudio = "input_audio"
 	ContentTypeFile       = "file"
 	ContentTypeVideoUrl   = "video_url" // 阿里百炼视频识别
@@ -363,6 +390,23 @@ func (m *Message) ParseContent() []MediaContent {
 			contentList = append(contentList, MediaContent{
 				Type:     ContentTypeImageURL,
 				ImageUrl: temp,
+			})
+
+		case ContentTypeAudioURL:
+			audioUrl := contentItem["audio_url"]
+			temp := &MessageAudioUrl{}
+			switch v := audioUrl.(type) {
+			case string:
+				temp.Url = v
+			case map[string]interface{}:
+				url, ok1 := v["url"].(string)
+				if ok1 {
+					temp.Url = url
+				}
+			}
+			contentList = append(contentList, MediaContent{
+				Type:     ContentTypeAudioURL,
+				AudioUrl: temp,
 			})
 
 		case ContentTypeInputAudio:
