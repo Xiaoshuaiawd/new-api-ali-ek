@@ -296,6 +296,10 @@ func (info *RelayInfo) SetFirstResponseTime() {
 	}
 }
 
+func (info *RelayInfo) IsFirstResponse() bool {
+	return info.isFirstResponse
+}
+
 func (info *RelayInfo) HasSendResponse() bool {
 	return info.FirstResponseTime.After(info.StartTime)
 }

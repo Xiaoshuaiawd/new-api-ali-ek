@@ -186,6 +186,8 @@ func main() {
 	// This will cause SSE not to work!!!
 	//server.Use(gzip.Gzip(gzip.DefaultCompression))
 	server.Use(middleware.RequestId())
+	// 添加Prometheus中间件
+	server.Use(middleware.PrometheusMiddleware())
 	middleware.SetUpLogger(server)
 	// Initialize session store
 	store := cookie.NewStore([]byte(common.SessionSecret))
@@ -203,6 +205,10 @@ func main() {
 	if port == "" {
 		port = strconv.Itoa(*common.Port)
 	}
+
+	// 启动Prometheus监控
+	common.SysLog("Prometheus metrics enabled at /metrics")
+
 	err = server.Run(":" + port)
 	if err != nil {
 		common.FatalLog("failed to start HTTP server: " + err.Error())

@@ -95,6 +95,8 @@ func TextHelper(c *gin.Context) (openaiErr *dto.OpenAIErrorWithStatusCode) {
 	if err != nil {
 		common.LogError(c, fmt.Sprintf("getAndValidateTextRequest failed: %s", err.Error()))
 		openaiErr := service.OpenAIErrorWrapperLocal(err, "invalid_text_request", http.StatusBadRequest)
+		// 记录错误信息供Prometheus使用
+		c.Set("error_message", err.Error())
 		// 保存错误对话历史
 		if textRequest != nil && relayInfo.RelayMode == relayconstant.RelayModeChatCompletions {
 			saveErrorConversationHistory(c, textRequest, relayInfo, err.Error(), "invalid_text_request")
@@ -111,6 +113,8 @@ func TextHelper(c *gin.Context) (openaiErr *dto.OpenAIErrorWithStatusCode) {
 		if err != nil {
 			common.LogWarn(c, fmt.Sprintf("user sensitive words detected: %s", strings.Join(words, ", ")))
 			openaiErr := service.OpenAIErrorWrapperLocal(err, "sensitive_words_detected", http.StatusBadRequest)
+			// 记录错误信息供Prometheus使用
+			c.Set("error_message", fmt.Sprintf("sensitive words detected: %s", strings.Join(words, ", ")))
 			// 保存错误对话历史
 			if relayInfo.RelayMode == relayconstant.RelayModeChatCompletions {
 				saveErrorConversationHistory(c, textRequest, relayInfo, fmt.Sprintf("sensitive words detected: %s", strings.Join(words, ", ")), "sensitive_words_detected")
@@ -123,6 +127,9 @@ func TextHelper(c *gin.Context) (openaiErr *dto.OpenAIErrorWithStatusCode) {
 	if err != nil {
 		return service.OpenAIErrorWrapperLocal(err, "model_mapped_error", http.StatusInternalServerError)
 	}
+
+	// 记录请求模型信息供Prometheus使用
+	c.Set("request_model", relayInfo.OriginModelName)
 
 	// 获取 promptTokens，如果上下文中已经存在，则直接使用
 	var promptTokens int
@@ -231,11 +238,17 @@ func TextHelper(c *gin.Context) (openaiErr *dto.OpenAIErrorWithStatusCode) {
 
 	if resp != nil {
 		httpResp = resp.(*http.Response)
+		// 设置渠道状态码到context中，供Prometheus监控使用
+		c.Set("channel_status", httpResp.StatusCode)
 		relayInfo.IsStream = relayInfo.IsStream || strings.HasPrefix(httpResp.Header.Get("Content-Type"), "text/event-stream")
 		if httpResp.StatusCode != http.StatusOK {
 			openaiErr = service.RelayErrorHandler(httpResp, false)
 			// reset status code 重置状态码
 			service.ResetStatusCode(openaiErr, statusCodeMappingStr)
+			// 记录错误信息供Prometheus使用
+			if openaiErr != nil && openaiErr.Error.Message != "" {
+				c.Set("error_message", openaiErr.Error.Message)
+			}
 			// 保存错误对话历史
 			if relayInfo.RelayMode == relayconstant.RelayModeChatCompletions {
 				errorMessage := fmt.Sprintf("HTTP %d: %s", httpResp.StatusCode, openaiErr.Error.Message)
@@ -249,6 +262,10 @@ func TextHelper(c *gin.Context) (openaiErr *dto.OpenAIErrorWithStatusCode) {
 	if openaiErr != nil {
 		// reset status code 重置状态码
 		service.ResetStatusCode(openaiErr, statusCodeMappingStr)
+		// 记录错误信息供Prometheus使用
+		if openaiErr.Error.Message != "" {
+			c.Set("error_message", openaiErr.Error.Message)
+		}
 		// 保存错误对话历史
 		if relayInfo.RelayMode == relayconstant.RelayModeChatCompletions {
 			errorMessage := fmt.Sprintf("DoResponse error: %s", openaiErr.Error.Message)

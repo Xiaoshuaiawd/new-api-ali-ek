@@ -134,6 +134,8 @@ func RecordErrorLog(c *gin.Context, userId int, channelId int, modelName string,
 	if err != nil {
 		common.LogError(c, "failed to record log: "+err.Error())
 	}
+
+	// Prometheus指标已在中间件中统一处理
 }
 
 func RecordConsumeLog(c *gin.Context, userId int, channelId int, promptTokens int, completionTokens int,
@@ -187,6 +189,8 @@ func RecordConsumeLog(c *gin.Context, userId int, channelId int, promptTokens in
 			LogQuotaData(userId, username, modelName, quota, common.GetTimestamp(), promptTokens+completionTokens)
 		})
 	}
+
+	// Prometheus指标已在中间件中统一处理
 }
 
 func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, startIdx int, num int, channel int, group string) (logs []*Log, total int64, err error) {
