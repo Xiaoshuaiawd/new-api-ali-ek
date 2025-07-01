@@ -95,4 +95,10 @@ func LoadEnv() {
 	GlobalWebRateLimitEnable = GetEnvOrDefaultBool("GLOBAL_WEB_RATE_LIMIT_ENABLE", true)
 	GlobalWebRateLimitNum = GetEnvOrDefault("GLOBAL_WEB_RATE_LIMIT", 60)
 	GlobalWebRateLimitDuration = int64(GetEnvOrDefault("GLOBAL_WEB_RATE_LIMIT_DURATION", 180))
+
+	// Initialize MES daily partition setting
+	MESDailyPartition = GetEnvOrDefaultBool("MES_DAILY_PARTITION", true)
+
+	// Initialize conversation history setting
+	ConversationHistoryEnabled = GetEnvOrDefaultBool("CONVERSATION_HISTORY_ENABLED", false)
 }

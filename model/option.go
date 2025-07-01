@@ -6,6 +6,7 @@ import (
 	"one-api/setting/config"
 	"one-api/setting/operation_setting"
 	"one-api/setting/ratio_setting"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -45,6 +46,7 @@ func InitOptionMap() {
 	common.OptionMap["AutomaticEnableChannelEnabled"] = strconv.FormatBool(common.AutomaticEnableChannelEnabled)
 	common.OptionMap["LogConsumeEnabled"] = strconv.FormatBool(common.LogConsumeEnabled)
 	common.OptionMap["ConversationHistoryEnabled"] = strconv.FormatBool(common.ConversationHistoryEnabled)
+	common.OptionMap["MESDailyPartition"] = strconv.FormatBool(common.MESDailyPartition)
 	common.OptionMap["DisplayInCurrencyEnabled"] = strconv.FormatBool(common.DisplayInCurrencyEnabled)
 	common.OptionMap["DisplayTokenStatEnabled"] = strconv.FormatBool(common.DisplayTokenStatEnabled)
 	common.OptionMap["DrawingEnabled"] = strconv.FormatBool(common.DrawingEnabled)
@@ -231,7 +233,21 @@ func updateOptionMap(key string, value string) (err error) {
 		case "LogConsumeEnabled":
 			common.LogConsumeEnabled = boolValue
 		case "ConversationHistoryEnabled":
-			common.ConversationHistoryEnabled = boolValue
+			// 如果环境变量已设置，优先使用环境变量
+			if os.Getenv("CONVERSATION_HISTORY_ENABLED") != "" {
+				envValue := os.Getenv("CONVERSATION_HISTORY_ENABLED") == "true"
+				common.ConversationHistoryEnabled = envValue
+			} else {
+				common.ConversationHistoryEnabled = boolValue
+			}
+		case "MESDailyPartition":
+			// 如果环境变量已设置，优先使用环境变量
+			if os.Getenv("MES_DAILY_PARTITION") != "" {
+				envValue := os.Getenv("MES_DAILY_PARTITION") == "true"
+				common.MESDailyPartition = envValue
+			} else {
+				common.MESDailyPartition = boolValue
+			}
 		case "DisplayInCurrencyEnabled":
 			common.DisplayInCurrencyEnabled = boolValue
 		case "DisplayTokenStatEnabled":

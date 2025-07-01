@@ -75,6 +75,7 @@ var MemoryCacheEnabled bool
 
 var LogConsumeEnabled = true
 var ConversationHistoryEnabled = false
+var MESDailyPartition = true
 
 var SMTPServer = ""
 var SMTPPort = 587

@@ -55,10 +55,16 @@ func main() {
 
 	model.CheckSetup()
 
-	// Initialize SQL Database
+	// Initialize Log Database
 	err = model.InitLogDB()
 	if err != nil {
-		common.FatalLog("failed to initialize database: " + err.Error())
+		common.FatalLog("failed to initialize log database: " + err.Error())
+	}
+
+	// Initialize MES Database for conversation history
+	err = model.InitMESDB()
+	if err != nil {
+		common.FatalLog("failed to initialize MES database: " + err.Error())
 	}
 	defer func() {
 		err := model.CloseDB()
@@ -79,6 +85,19 @@ func main() {
 	constant.InitEnv()
 	// Initialize options
 	model.InitOptionMap()
+
+	// Log the final settings
+	common.SysLog(fmt.Sprintf("Final ConversationHistoryEnabled setting: %v", common.ConversationHistoryEnabled))
+	common.SysLog(fmt.Sprintf("Final MESDailyPartition setting: %v", common.MESDailyPartition))
+
+	// Ensure today's partition tables exist
+	err = model.EnsureTodayTablesExist()
+	if err != nil {
+		common.FatalLog("failed to ensure today's partition tables: " + err.Error())
+	}
+
+	// Start partition table monitor for automatic daily table creation
+	model.StartPartitionTableMonitor()
 
 	service.InitTokenEncoders()
 

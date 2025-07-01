@@ -14,6 +14,8 @@ services:
       - ./logs:/app/logs
     environment:
       - SQL_DSN=root:123456@tcp(mysql:3306)/new-api  # Point to the mysql service
+      - MES_SQL_DSN=root:123456@tcp(mysql:3306)/new-api-mes  # 聊天历史专用数据库（可选，不设置则使用主数据库）
+      - MES_DAILY_PARTITION=true  # 启用聊天历史按日期分表功能（可选，默认为false）
       - REDIS_CONN_STRING=redis://redis
       - TZ=Asia/Shanghai
       - ERROR_LOG_ENABLED=true # 是否启用错误日志记录
